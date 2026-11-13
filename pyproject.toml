@@ -1,0 +1,27 @@
+[project]
+name = "ivfadapt"
+version = "0.1.0"
+description = "Query-adaptive nprobe for IVF+PQ: an epsilon distance-ratio rule vs fixed nprobe vs oracle"
+readme = "README.md"
+authors = [
+    { name = "KirylKrutsko", email = "kirill@krutsko.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "faiss-cpu",
+    "numpy",
+    "matplotlib",
+    "pandas",
+    "pyyaml",
+    "tqdm",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
