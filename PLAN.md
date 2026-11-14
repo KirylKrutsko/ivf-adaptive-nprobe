@@ -3,6 +3,14 @@
 Based on `proposal.pdf`. Rule under test: per query, scan every cell whose centroid
 distance is ≤ (1 + ε) × the nearest centroid distance.
 
+**Recall metric (decision D5).** The PQ16x8 codes cap raw recall@10 at ≈ 0.58 whatever
+cells are scanned (see `WORKLOG.md`, 2026-11-14). So the reported recall@10 is computed
+**after exact re-ranking**: the search returns the `k_rerank` = 200 best candidates by PQ
+distance, their exact L2 distances to the query are computed from the stored base vectors,
+and the 10 closest are the answer (IVFADC+R). Raw-PQ recall is shown as a secondary curve.
+**Work** per query = scanned vectors (`ndis`) + `k_rerank` exact distance evaluations; the
+tables also give `ndis` alone. All three methods use the same re-ranking.
+
 ---
 
 ## 0. Project setup
@@ -59,7 +67,8 @@ files, so a plot can be redrawn without rerunning a search.
 ## 2. Search machinery (week 1–2)
 
 ### Fixed nprobe (baseline)
-- `index.nprobe = p; index.search(xq, 10)`. Use a dense grid, not only powers of 2:
+- `index.nprobe = p; index.search(xq, k_rerank)`, then exact re-rank to top-10 (D5).
+  Use a dense grid, not only powers of 2:
   every integer 1..16, then about 1.2× steps up to 256. Matched-recall comparisons
   interpolate along this curve, so a coarse grid skews them.
 - Work: reset `faiss.cvar.indexIVF_stats` before each run and read `.ndis`. Also compute
@@ -74,8 +83,8 @@ Faiss already supports per-query cell lists:
    squared distances. Clamp `Dq[:, 0]` at 0 because Faiss's BLAS L2 path can return tiny
    negative values. Use `<=` so ε = 0 gives one cell unless distances tie.
 3. Set masked-out entries of `Iq` to `-1`, cut the matrix to the widest row in the batch,
-   set `index.nprobe` to that width, and call `index.search_preassigned(xq, 10, Iq, Dq)`.
-   Faiss skips list ids < 0, so each query scans only its own cells.
+   set `index.nprobe` to that width, and call `index.search_preassigned(xq, k_rerank, Iq, Dq)`.
+   Faiss skips list ids < 0, so each query scans only its own cells. Re-rank as in the baseline.
 4. To keep padding small, sort queries by cell count and run them in groups.
    This is the same idea as the proposal's fallback, used here to save time rather than to work around a limitation.
 
@@ -87,8 +96,10 @@ rerun E2–E3 with 512 or 1024 and show whether the conclusions change.
 
 ### Correctness tests (`tests/`)
 - **Equivalence**: a "rule" that always returns c cells, run through `search_preassigned`,
-  must give exactly the same labels and distances as `index.search` with `nprobe=c`.
-  Test c ∈ {1, 4, 32}.
+  must give exactly the same labels and distances as `index.search` with `nprobe=c`
+  (for the k_rerank candidates; ids may swap only where PQ distances tie). Test c ∈ {1, 4, 32}.
+- **Re-ranking**: with k_rerank ≥ ndis (one small cell) the re-ranked result equals an exact
+  search restricted to that cell.
 - **ndis**: the scanned-vector count from `indexIVF_stats.ndis` must equal Σ list sizes of
   the selected cells, for both the fixed and the adaptive path.
 - **Rule sanity**: ε = 0 → exactly 1 cell per query (unless ties). Cell count is monotone in ε.
@@ -101,8 +112,11 @@ rerun E2–E3 with 512 or 1024 and show whether the conclusions change.
 For IVF-PQ with residual encoding, the PQ distance of a vector depends only on the query
 and its own cell, not on how many cells are scanned. So:
 - for each query q and rank c = 1..C_max, scan **only** its c-th nearest cell
-  (`search_preassigned` with width 1) and keep the top-10;
-- merge these lists cumulatively. The top-10 after c cells equals the search result with nprobe = c.
+  (`search_preassigned` with width 1) and keep the top-`k_rerank` PQ candidates;
+- merge these lists cumulatively by PQ distance, keep the best `k_rerank`, re-rank them
+  exactly and take the top-10. The result after c cells equals the real search with
+  nprobe = c followed by the same re-ranking (D5). Process queries in chunks (the per-cell
+  candidate arrays are n_q × C_max × k_rerank).
 
 This yields, for every query, `recall_q(c)` and `work_q(c)` (cumulative scanned vectors) for
 c = 1..C_max, in about the cost of one search at nprobe = C_max. Store them as
@@ -164,7 +178,8 @@ For each recall target R ∈ {0.8, 0.9, 0.95, 0.99}:
 
 ### E5: Timing (week 3)
 - `faiss.omp_set_num_threads(1)`; warm-up run; median of 5 repeats.
-- Measure the components separately: coarse quantizer, rule (NumPy masking), list scanning.
+- Measure the components separately: coarse quantizer, rule (NumPy masking), list scanning,
+  exact re-ranking (a per-query constant; use `IndexRefineFlat` for the plain-Faiss baseline).
   Run the baseline through the same `quantizer.search + search_preassigned` path as well
   as plain `index.search`. This separates the cost of the rule from the cost of the path.
 - Report QPS at matched recall alongside the ndis saving. This checks the prediction that
@@ -224,6 +239,15 @@ Each one reuses the same pipeline with a different config:
   (below Faiss's 39 × nlist guideline) and not a 256k subsample (too small for nlist =
   16384, one extra config knob). Queries are never used in training. The build script keeps
   an optional subsample size for debug builds only.
+- **D5. Recall is measured after exact re-ranking of the top-200 PQ candidates**
+  (closed 2026-11-14, after measurements). Raw PQ16x8 recall@10 plateaus at ≈ 0.58, so the
+  proposal's targets 0.8–0.99 were unreachable. Options considered: (1) PQ16 + exact
+  re-rank, (2) IVFFlat, (3) lower the targets. After re-ranking the recall curves of
+  PQ16 + rerank 200, PQ32 + rerank 100 and IVFFlat coincide to three decimals, so the
+  choice does not affect RQ1/RQ2; (1) keeps the proposal's index and is standard practice
+  (IVFADC+R). Rerank 100 is too few for PQ16 (0.982 at nprobe 256), 200 reaches 0.996.
+  Work = ndis + 200; the constant is small against ndis ≈ 8000 at R = 0.9. Raw-PQ recall
+  stays as a second curve and gives the PQ-ceiling result (extension 5) for free.
 - **D4. ε is defined on plain L2 distances**, as in the proposal's example (100 → 110 at
   ε = 0.1). Faiss returns squared distances, so the code tests `D_j ≤ (1+ε)² · D_1` with
   `D_1` clamped at 0 and a non-strict comparison. One test checks this equals the rule on
