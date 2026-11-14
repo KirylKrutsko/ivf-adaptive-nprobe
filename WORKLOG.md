@@ -64,8 +64,27 @@ tracks IVFFlat almost exactly, i.e. it measures cell coverage with PQ noise remo
 3. Keep PQ16 and raw PQ ranking, and move the targets down to the reachable range
    (e.g. 0.4, 0.5, 0.55, 0.58). Honest but the numbers look odd and the top target sits on
    a plateau where every method needs many cells.
-Suggested: option 1 with PQ16 (proposal's index) and targets {0.8, 0.9, 0.95}, dropping 0.99,
-plus raw-PQ recall as a secondary curve; or option 1 with PQ32 if 0.99 is wanted.
+Measured (2000 test queries, single thread, same cells for every column):
+
+| nprobe | ndis | PQ16 raw | PQ16 + rerank 100 | PQ16 + rerank 200 | PQ32 + rerank 100 | IVFFlat |
+|---|---|---|---|---|---|---|
+| 4 | 1109 | 0.431 | 0.554 | 0.554 | 0.554 | 0.554 |
+| 16 | 4398 | 0.547 | 0.829 | 0.832 | 0.832 | 0.832 |
+| 32 | 8685 | 0.569 | 0.915 | 0.921 | 0.922 | 0.923 |
+| 64 | 17111 | 0.577 | 0.958 | 0.968 | 0.969 | 0.970 |
+| 128 | 33626 | 0.580 | 0.977 | 0.990 | 0.992 | 0.993 |
+| 256 | 65756 | 0.581 | 0.982 | 0.996 | 0.998 | 0.999 |
+
+After exact re-ranking, recall no longer depends on the PQ: PQ16 + rerank 200, PQ32 +
+rerank 100 and IVFFlat agree to the third decimal. Re-ranked recall is cell coverage, so
+the choice between them barely affects RQ1/RQ2; it affects cost and framing only.
+Rerank 100 on PQ16 is too few candidates at high nprobe (0.982 at 256). IVFFlat is fastest
+at small nprobe but ~2x slower than PQ16 at nprobe 256 (512 vs 16 bytes per vector).
+
+Suggested: keep the proposal's index IVF4096,PQ16x8, main recall = recall@10 after exact
+re-ranking of the top-200 PQ candidates (IndexRefineFlat in Faiss), work = scanned vectors
++ a constant 200 exact distances per query (measured separately in E5). Keep all four
+targets. Show raw-PQ recall as a second curve: it is the PQ ceiling of extension 5 for free.
 Either way the three methods still differ only in the choice of cells.
 
 **Next**
