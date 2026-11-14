@@ -10,7 +10,7 @@ Status board (updated with every entry):
 | Area | State |
 |---|---|
 | §0 Project setup | done |
-| §1 Data and index | not started |
+| §1 Data and index | done (index built, cached in `data/`) |
 | §2 Search machinery + tests | not started |
 | §3 Oracle | not started |
 | E1 fixed-nprobe curve | not started |
@@ -20,6 +20,57 @@ Status board (updated with every entry):
 | E5 timing | not started |
 | Plots | not started |
 | Extensions | not started |
+
+---
+
+## 2026-11-14 (evening) — §1 done; recall ceiling of PQ16 found
+
+**Done**
+- `config.py` (YAML + paths), `data.py` (fvecs/ivecs, download, ground truth, tune/test
+  split), `index.py` (build on full base, cache, cell ids + list sizes),
+  `experiments/01_build.py`. Output in `results/01_build.json`.
+- SIFT1M downloaded from the irisa FTP (168 MB). Ground truth recomputed with
+  IndexFlatL2, k = 100, in 7 s: 9944/10000 queries have the same top-10 set as the shipped
+  file, all 56 differences are exact ties on the 10th neighbour. Split: 5000 tune / 5000 test,
+  seed 0, saved to `data/sift1m/query_split_seed0.npz`.
+- Index `IVF4096,PQ16x8` trained on the full 1M base (D3) in 71 s, add 9 s. List sizes:
+  mean 244, median 225, min 59, p99 558, max 1292, no empty lists. Cell ids checked
+  against `quantizer.search` on a 20k sample: identical.
+
+**Finding: the PQ16x8 recall@10 ceiling is ≈ 0.59.** On the test split (fixed nprobe, raw
+PQ ranking, no re-ranking):
+
+| nprobe | PQ16 R@10 | PQ32 R@10 | PQ64 R@10 | IVFFlat R@10 | 10-in-top-100 (PQ16) |
+|---|---|---|---|---|---|
+| 1 | 0.256 | 0.274 | 0.283 | 0.285 | 0.285 |
+| 4 | 0.446 | 0.515 | 0.557 | 0.573 | 0.573 |
+| 16 | 0.557 | 0.681 | 0.785 | 0.842 | 0.839 |
+| 64 | 0.586 | 0.733 | 0.871 | 0.973 | 0.963 |
+| 256 | 0.589 | 0.740 | 0.884 | 0.999 | 0.984 |
+
+(PQ32/PQ64/IVFFlat share the same coarse quantizer and cells as PQ16; built in ~10 s each.)
+So with the index from the proposal, the targets R ∈ {0.8, 0.9, 0.95, 0.99} cannot be
+reached by any cell-selection method: above nprobe ≈ 16 the misses are PQ error, not
+skipped cells. The last column (share of true top-10 among the first 100 PQ candidates)
+tracks IVFFlat almost exactly, i.e. it measures cell coverage with PQ noise removed.
+
+**Open question Q1 (needs both of us): what to measure recall on.** Options:
+1. Keep IVF4096,PQ16x8 and report recall@10 **after exact re-ranking of the top-100 PQ
+   candidates** (IVFADC+R, as in the seminar paper's follow-up). Ceiling ≈ 0.98, so R = 0.99
+   is still out of reach; PQ32 + re-rank reaches 0.999. The 100 exact distances per query
+   must be counted as work (a constant offset on top of scanned vectors).
+2. Switch to IVF4096,Flat (no PQ). Cleanest for the cell-selection question, recall reaches
+   1.0, no "unreachable" bin in the oracle. But the proposal and seminar topic say IVF+PQ.
+3. Keep PQ16 and raw PQ ranking, and move the targets down to the reachable range
+   (e.g. 0.4, 0.5, 0.55, 0.58). Honest but the numbers look odd and the top target sits on
+   a plateau where every method needs many cells.
+Suggested: option 1 with PQ16 (proposal's index) and targets {0.8, 0.9, 0.95}, dropping 0.99,
+plus raw-PQ recall as a secondary curve; or option 1 with PQ32 if 0.99 is wanted.
+Either way the three methods still differ only in the choice of cells.
+
+**Next**
+- Decide Q1, then §2: fixed-nprobe path with ndis counting, `search_preassigned` path,
+  tests, E1.
 
 ---
 
