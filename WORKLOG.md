@@ -39,7 +39,7 @@ Status board (updated with every entry):
   recall ≤ coverage; coverage and work monotone; per-query target is the first crossing;
   Lagrangian curve never needs more work than fixed nprobe at the same mean recall.
 - E2 (`experiments/03_oracle.py`, test split). The fixed-nprobe curve derived from the
-  oracle arrays reproduces E1 exactly (recall and ndis identical at all 31 grid points),
+  oracle arrays reproduces E1 (ndis identical, recall equal to 1e-5 = float32 rounding, at all 31 grid points),
   which is the end-to-end check that the cumulative merge is right.
 
 **Results (test split, 5000 queries)**
