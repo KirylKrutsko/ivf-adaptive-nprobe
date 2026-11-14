@@ -11,15 +11,62 @@ Status board (updated with every entry):
 |---|---|
 | §0 Project setup | done |
 | §1 Data and index | done (index built, cached in `data/`) |
-| §2 Search machinery + tests | not started |
+| §2 Search machinery + tests | done (16 tests pass) |
 | §3 Oracle | not started |
-| E1 fixed-nprobe curve | not started |
+| E1 fixed-nprobe curve | done (`results/02_fixed.csv`) |
 | E2 oracle + histogram | not started |
 | E3 ε sweep | not started |
 | E4 tune/test, RQ1/RQ2 | not started |
 | E5 timing | not started |
 | Plots | not started |
 | Extensions | not started |
+
+---
+
+## 2026-11-14 (night) — D5 closed; §2 search machinery, tests, E1
+
+**Done**
+- **D5 closed** (see `PLAN.md`): recall@10 is measured after exact re-ranking of the top-200
+  PQ candidates; work = ndis + 200. `k_rerank: 200` added to the config.
+- `rules.py`: `quantizer_topk`, `ratio_cells` (D4: (1+ε)² on squared distances, clamp, `<=`),
+  `fixed_cells`, `n_cells`. `search.py`: `fixed_search`, `preassigned_search` (queries
+  grouped by cell count, one `search_preassigned` call per distinct count, no padding),
+  `rerank_exact` (vectorised NumPy, chunks of 1000 queries), `scanned_vectors`, Faiss stats
+  helpers. `metrics.py`: per-query recall, log-interpolation of work at a recall target.
+  `env.py`: one loader for config + vectors + ground truth + split + index.
+- Tests (`uv run pytest`, 16 pass in ~1 s, on 500 tune queries so the test split stays
+  untouched): constant-c preassigned search == `index.search(nprobe=c)` for c ∈ {1, 4, 32}
+  with bit-identical distances; mixed widths in one batch each match their own nprobe;
+  re-ranking inside one small cell == exact search in that cell; Faiss `ndis` == Σ list
+  sizes on both paths; ε = 0 → one cell; monotone in ε; squared == plain-distance rule;
+  kept cells form a prefix.
+- **E1** (`experiments/02_fixed.py`, test split, 5000 queries, 31 nprobe values):
+
+  | nprobe | recall (re-ranked) | raw PQ recall | mean ndis | p99 ndis |
+  |---|---|---|---|---|
+  | 1 | 0.285 | 0.256 | 279 | 772 |
+  | 4 | 0.573 | 0.446 | 1114 | 2632 |
+  | 13 | 0.809 | 0.547 | 3593 | 7153 |
+  | 23 | 0.892 | 0.570 | 6295 | 11201 |
+  | 28 | 0.914 | 0.576 | 7634 | 13142 |
+  | 48 | 0.957 | 0.584 | 12927 | 20175 |
+  | 120 | 0.990 | 0.589 | 31535 | 44460 |
+  | 256 | 0.996 | 0.589 | 65641 | 84495 |
+
+  Interpolated: R = 0.8 at nprobe ≈ 12.4, R = 0.9 ≈ 25, R = 0.95 ≈ 43, R = 0.99 ≈ 120.
+  Per-query recall and ndis saved in `results/02_fixed_perquery.npz` for the bootstrap.
+
+**Observation worth knowing.** Faiss's own `ndis` counter and Σ list sizes of the
+`quantizer.search` cells disagree for a handful of queries at some nprobe (e.g. −41 vectors
+at nprobe 12 out of 16.6M). Cause: query 3951 has its 12th and 13th centroids at relative
+distance 1.8e-6 and the quantizer search inside `index.search` rounds differently from a
+standalone `quantizer.search` (different BLAS blocking). Not a bookkeeping bug; the E1 script
+asserts agreement to 1e-4 and stores the gap per nprobe (`faiss_ndis_gap`). The rule path
+has no such issue because it passes the cells explicitly.
+
+**Next**
+- §3 oracle: per-cell top-200 candidates via width-1 `search_preassigned`, cumulative merge,
+  re-rank, `recall_q(c)` / `work_q(c)` arrays; both oracle variants (D2). Then E2, E3, E4.
 
 ---
 
