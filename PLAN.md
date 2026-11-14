@@ -44,8 +44,12 @@ files, so a plot can be redrawn without rerunning a search.
 2. **Ground truth**: brute-force with `faiss.IndexFlatL2` (k = 100). Check that it matches
    the shipped `sift_groundtruth.ivecs` on the top 10 (ties may differ slightly).
 3. **Index**: `IndexIVFPQ(IndexFlatL2(128), 128, nlist=4096, M=16, nbits=8)`.
-   - Training: the 100k learn set is below Faiss's suggested 39 × 4096 ≈ 160k points.
-     Train on a fixed random 256k subset of the base set instead, and record this choice.
+   - Training: train on the **full 1M base set** (decision D3). The 100k learn set is below
+     Faiss's suggested 39 × 4096 ≈ 160k points; the full base gives ≈ 244 points per
+     centroid, within Faiss's own default cap of 256, and is enough for nlist = 16384 too
+     (≈ 61 per centroid). Faiss subsamples PQ training to 65 536 residuals by itself, so the
+     choice only affects the coarse quantizer. `train_size: null` in the config means the
+     full base; a number is allowed for quick debug builds only.
    - Save the trained index to `data/` (`faiss.write_index`) so it is built only once.
    - Save the cell id of every base vector (from the invlists) and the list sizes.
      Steps 3–5 need both.
@@ -63,17 +67,23 @@ files, so a plot can be redrawn without rerunning a search.
 
 ### Per-query cells (our rule): this handles the "main risk"
 Faiss already supports per-query cell lists:
-1. `Dq, Iq = index.quantizer.search(xq, K)` with K = `max_cells` (e.g. 256).
+1. `Dq, Iq = index.quantizer.search(xq, K)` with K = `max_cells` = 256.
    The distances are **squared** L2.
-2. Rule mask: `Dq[:, j] <= (1+ε)² · Dq[:, 0]`. Squaring the factor is how "(1+ε) times as
-   far" applies to squared distances. Write it down in the report.
+2. Rule mask: `Dq[:, j] <= (1+ε)² · max(Dq[:, 0], 0)` (decision D4). ε is defined on plain
+   distances, exactly as in the proposal; squaring the factor is the equivalent test on
+   squared distances. Clamp `Dq[:, 0]` at 0 because Faiss's BLAS L2 path can return tiny
+   negative values. Use `<=` so ε = 0 gives one cell unless distances tie.
 3. Set masked-out entries of `Iq` to `-1`, cut the matrix to the widest row in the batch,
    set `index.nprobe` to that width, and call `index.search_preassigned(xq, 10, Iq, Dq)`.
    Faiss skips list ids < 0, so each query scans only its own cells.
 4. To keep padding small, sort queries by cell count and run them in groups.
    This is the same idea as the proposal's fallback, used here to save time rather than to work around a limitation.
 
-`max_cells` caps the rule and acts as a hidden second parameter. Fix it (e.g. 256) and report it.
+`max_cells` caps the rule and is a second parameter. Decision D1: fix it at 256 for the
+rule, the oracle (C_max) and the top of the nprobe grid, so all three methods choose from
+the same range 1..256 cells. Report it, and in E3 record the share of queries that hit
+the cap at the ε values chosen in E4; if that share exceeds a few percent at R = 0.99,
+rerun E2–E3 with 512 or 1024 and show whether the conclusions change.
 
 ### Correctness tests (`tests/`)
 - **Equivalence**: a "rule" that always returns c cells, run through `search_preassigned`,
@@ -98,17 +108,31 @@ This yields, for every query, `recall_q(c)` and `work_q(c)` (cumulative scanned 
 c = 1..C_max, in about the cost of one search at nprobe = C_max. Store them as
 `(n_queries, C_max)` arrays. The oracle, the histogram and the analysis of rule vs oracle all use these arrays.
 
-### Two oracle variants (report both)
-1. **Per-query target (as in the proposal; used for the histogram)**:
+### Two oracle variants (compute and report both; decision D2)
+1. **Per-query target (as in the proposal)**:
    `c*_q(t)` = smallest c with `recall_q(c) ≥ t`, for t ∈ {0.8, 0.9, 1.0}.
    Some queries never reach t even at C_max, because PQ error caps their recall.
    Report how many these are, as a separate "unreachable" bin.
-2. **Average-recall oracle (main curve for plot 1)**: requiring every query to reach
+   Note that its mean recall is above t (many queries jump straight to 1.0), so its point
+   on plot 1 is not on the R = t line.
+2. **Average-recall oracle (Lagrangian)**: requiring every query to reach
    recall 0.9 is *not* the cheapest way to get mean recall 0.9. The best allocation follows
    from a Lagrangian sweep. For each λ, every query independently picks
    `c = argmin_c work_q(c) − λ · recall_q(c)`. Sweeping λ traces the best possible
-   (mean work, mean recall) curve for any per-query cell count. This is the true upper
-   bound for RQ2. Variant 1 lies to its right.
+   (mean work, mean recall) curve for any per-query cell count. Variant 1 lies to its right.
+   It may give a hard query 1 cell and low recall when that is cheaper for the mean: say so
+   in the report.
+
+How they are used:
+- **Headline RQ2 number and the solid oracle line on plot 1: Lagrangian.** It matches the
+  metric on the axis (mean recall), so "captured share" is measured at the same recall.
+  Using variant 1 as the denominator would overstate the captured share.
+- **Also report RQ2 against variant 1** as a second column in the E4 table.
+- **Histogram (plot 2) and the rule-vs-oracle diagnostic (plot 3): variant 1**, because
+  these need a cell count per query at a fixed target.
+- The gap between the two oracle curves is a result in itself: the cost of a per-query
+  recall guarantee compared with a guarantee on the mean.
+- State in the report that the proposal described variant 1 and why the headline uses 2.
 
 ## 4. Experiment procedure
 
@@ -116,9 +140,9 @@ c = 1..C_max, in about the cost of one search at nprobe = C_max. Store them as
 Test set: recall@10 and mean ndis for each nprobe in the grid. Also store per-query cells and ndis.
 
 ### E2: Oracle and histogram (week 2)
-Compute `recall_q(c)`, `work_q(c)` with C_max = 256 (raise it if many queries are still
-unreachable). Outputs: the histogram of `c*_q(0.9)` and `c*_q(1.0)` (log-x, with the
-unreachable bin), and the Lagrangian oracle curve.
+Compute `recall_q(c)`, `work_q(c)` with C_max = `max_cells` = 256 (see D1 for when to
+raise it). Outputs: the histogram of `c*_q(0.9)` and `c*_q(1.0)` (log-x, with the
+unreachable bin), the Lagrangian oracle curve and the per-query-target oracle curve.
 
 ### E3: Rule sweep (week 2)
 ε grid: start dense near 0. In 128-d space centroid distances concentrate, so the useful
@@ -133,7 +157,8 @@ For each recall target R ∈ {0.8, 0.9, 0.95, 0.99}:
   same way, so the comparison is fair.
 - **RQ1**: `saving = ndis_fixed / ndis_rule` at matched recall. Also give the curve-based
   version, with ndis log-interpolated at exactly R on both test curves.
-- **RQ2**: `captured = (ndis_fixed − ndis_rule) / (ndis_fixed − ndis_oracle)`.
+- **RQ2**: `captured = (ndis_fixed − ndis_rule) / (ndis_fixed − ndis_oracle)`, with the
+  Lagrangian oracle as the headline and the per-query-target oracle as a second column.
 - Uncertainty: a bootstrap over test queries (1000 resamples) for saving and captured.
   This is cheap because all values are means of per-query numbers.
 
@@ -153,8 +178,9 @@ For each recall target R ∈ {0.8, 0.9, 0.95, 0.99}:
   the two curves is PQ error, which no cell-selection rule can fix.
 
 ## 5. Plots
-1. Recall@10 vs mean scanned vectors (log-x): fixed, rule, oracle (Lagrangian), and the
-   per-query-target oracle drawn dashed. Mark the R = 0.9 line.
+1. Recall@10 vs mean scanned vectors (log-x): fixed, rule, Lagrangian oracle (solid), and
+   the per-query-target oracle (dashed), with the legend stating what each oracle
+   guarantees. Mark the R = 0.9 line.
 2. Histogram of oracle cells needed (log-x bins, unreachable bin).
 3. Rule cells vs oracle cells (2-D histogram).
 4. Saving factor vs recall target (shows whether "the saving grows with the target" holds).
@@ -166,9 +192,13 @@ Each one reuses the same pipeline with a different config:
    use L2, and decide which). Only `data.py` and the config change.
 2. Tail latency: per-query time (batch size 1, subtract Python overhead measured on an
    empty call), p50 / p99 for fixed and rule at matched mean recall.
-3. nlist ∈ {1024, 4096, 16384}: rebuild the index. For 16384, train on ≥ 640k points.
-4. Gap rule: scan cell j if `d_j − d_1 ≤ δ` (absolute), or try a normalised version
-   `(d_j − d_1)/d_1`. Compare with the ratio rule at matched recall and by correlation with the oracle.
+3. nlist ∈ {1024, 4096, 16384}: rebuild the index, trained on the full base as in D3.
+4. Gap rule: scan cell j if `d_j − d_1 ≤ δ` on **plain** distances (take `sqrt` of `Dq`;
+   differences of squares are not equivalent: `d_j² − d_1² = (d_j − d_1)(d_j + d_1)`).
+   Do not use `(d_j − d_1)/d_1 ≤ δ` as a variant: it is identical to the ratio rule with
+   ε = δ. If a normalised gap is wanted, normalise by `d_2 − d_1` or by the mean distance
+   to the K nearest centroids. Compare with the ratio rule at matched recall and by
+   correlation with the oracle.
 5. PQ ceiling: already covered by the coverage diagnostic.
 6. Rule fitted to the oracle: features from `Dq` (d2/d1, d10/d1, …) → predicted `c*`.
    Fit a lookup table on tune and evaluate on test.
@@ -181,9 +211,21 @@ Each one reuses the same pipeline with a different config:
 | 3 | E5 timing, diagnostics, extensions 1→… |
 | 4 | Bootstrap CIs, write-up, slides |
 
-## Open decisions
-- Rule on squared vs plain distances: they are equivalent through (1+ε)², but the
-  reported ε has to say which one it is.
-- `max_cells` cap value (proposed 256).
-- Training set for the coarse quantizer and PQ (proposed: 256k base subsample).
-- Main oracle in plot 1: Lagrangian (proposed) or per-query target.
+## Decisions (closed 2026-11-14)
+- **D1. `max_cells` = 256** for the rule, for the oracle's C_max and as the top of the nprobe
+  grid, so every method picks from the same range of 1..256 cells. Report the share of
+  queries hitting the cap; raise to 512/1024 and recheck if it exceeds a few percent at the
+  ε chosen for R = 0.99. Named in the report as a second parameter of the rule.
+- **D2. Both oracles are computed and shown.** Lagrangian oracle: headline RQ2 number and
+  solid line on plot 1, because it matches the mean-recall metric. Per-query-target oracle:
+  dashed line on plot 1, second RQ2 column, histogram (plot 2) and rule-vs-oracle
+  diagnostic (plot 3). The gap between them is reported as a result.
+- **D3. Train the coarse quantizer and PQ on the full 1M base set**, not the 100k learn set
+  (below Faiss's 39 × nlist guideline) and not a 256k subsample (too small for nlist =
+  16384, one extra config knob). Queries are never used in training. The build script keeps
+  an optional subsample size for debug builds only.
+- **D4. ε is defined on plain L2 distances**, as in the proposal's example (100 → 110 at
+  ε = 0.1). Faiss returns squared distances, so the code tests `D_j ≤ (1+ε)² · D_1` with
+  `D_1` clamped at 0 and a non-strict comparison. One test checks this equals the rule on
+  `sqrt(D)` with factor (1+ε). The gap rule (extension 4) is on plain distances and its
+  "normalised" variant is dropped as identical to the ratio rule.

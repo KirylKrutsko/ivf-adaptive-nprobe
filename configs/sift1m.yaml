@@ -4,7 +4,7 @@ index:
   nlist: 4096
   pq_m: 16
   pq_nbits: 8
-  train_size: 256000     # random subset of base vectors (learn set is below 39*nlist)
+  train_size: null       # null = full 1M base (D3); an integer = random subsample, debug builds only
 seed: 0
 k: 10
 split:
