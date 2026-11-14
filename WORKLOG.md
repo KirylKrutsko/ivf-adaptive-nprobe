@@ -12,14 +12,79 @@ Status board (updated with every entry):
 | §0 Project setup | done |
 | §1 Data and index | done (index built, cached in `data/`) |
 | §2 Search machinery + tests | done (16 tests pass) |
-| §3 Oracle | not started |
+| §3 Oracle | done (`oracle.py`, 7 tests) |
 | E1 fixed-nprobe curve | done (`results/02_fixed.csv`) |
-| E2 oracle + histogram | not started |
+| E2 oracle + histogram | done (`results/03_oracle_*`) |
 | E3 ε sweep | not started |
 | E4 tune/test, RQ1/RQ2 | not started |
 | E5 timing | not started |
 | Plots | not started |
 | Extensions | not started |
+
+---
+
+## 2026-11-15 — §3 oracle and E2
+
+**Done**
+- `oracle.py`: `compute_curves` scans each query's 256 nearest cells one at a time
+  (`search_preassigned`, width 1, k = 200), computes the exact distance of every PQ candidate
+  once, merges the candidate lists cumulatively by PQ distance, re-ranks the running top-200
+  exactly and records, for every c = 1..256: `recall_q(c)` (re-ranked), raw PQ recall,
+  **coverage** (share of true top-10 whose cell is among the first c) and cumulative work.
+  Both oracles: `per_query_target` / `per_query_target_curve` (variant 1) and
+  `lagrangian_curve` (variant 2, 300 λ values, log-spaced 1e1..1e8). All 10k queries in 177 s;
+  arrays cached in `results/03_oracle_curves.npz` (~5 MB each).
+- Tests (7 new, 23 total): oracle recall at c equals real `index.search(nprobe=c)` +
+  re-ranking per query for c ∈ {1, 4, 32} (also raw PQ recall); work equals Σ list sizes;
+  recall ≤ coverage; coverage and work monotone; per-query target is the first crossing;
+  Lagrangian curve never needs more work than fixed nprobe at the same mean recall.
+- E2 (`experiments/03_oracle.py`, test split). The fixed-nprobe curve derived from the
+  oracle arrays reproduces E1 exactly (recall and ndis identical at all 31 grid points),
+  which is the end-to-end check that the cumulative merge is right.
+
+**Results (test split, 5000 queries)**
+
+Per-query-target oracle, cells needed per query:
+
+| target | unreachable | median | mean | p90 | p99 | need 1 cell | need ≤ 3 | need > 20 |
+|---|---|---|---|---|---|---|---|---|
+| 0.8 | 2 | 8 | 13.7 | 31 | 80 | 6.0% | 22.0% | 19.6% |
+| 0.9 | 9 | 13 | 21.2 | 50 | 126 | 3.6% | 14.3% | 33.1% |
+| 1.0 | 139 | 23 | 36.3 | 87 | 191 | 1.9% | 7.8% | 53.8% |
+
+(With k = 10 per-query recall moves in steps of 0.1, so targets 0.95 and 0.99 are the
+same as 1.0 for a single query: all ten neighbours. Report them under 1.0.)
+
+Work (ndis) needed at each mean-recall target and the largest possible saving:
+
+| R | fixed nprobe | Lagrangian oracle | per-query oracle | max saving (Lagr.) | max saving (per-query) |
+|---|---|---|---|---|---|
+| 0.80 | 3422 | 1924 | 3049 | 1.71× | 1.12× |
+| 0.90 | 6707 | 3290 | 5063 | 1.98× | 1.31× |
+| 0.95 | 11508 | 4774 | 7293 | 2.35× | 1.56× |
+| 0.99 | 31504 | 7839 | 10176 | 3.94× | 3.06× |
+
+(saving = (ndis_fixed + 200) / (ndis_oracle + 200), i.e. work incl. re-ranking.)
+Coverage at 256 cells 0.9991, recall 0.9964: with re-ranking the PQ ceiling is ~0.3%.
+
+**What this says about the proposal's predictions.**
+- "Most queries need 1–3 cells" is **wrong for SIFT1M at nlist = 4096**: at target 0.9 only
+  14% need ≤ 3 cells, the median needs 13, a third need more than 20. Queries are "hard"
+  far more often than assumed: with ~244 vectors per cell, a query's 10 true neighbours are
+  spread over many cells.
+- Consequently the oracle saves ~2× at R = 0.9, not "several times". The saving does grow
+  with the target (1.7× → 3.9×), as predicted.
+- The gap between the two oracles is large (1.98× vs 1.31× at 0.9): guaranteeing 0.9 to
+  *every* query costs much more than reaching 0.9 on average. The proposal's oracle
+  understates the possible saving; the Lagrangian one is the right ceiling for RQ2 (D2).
+- Prediction "the rule gets about half of the saving, 1.5–2× fewer scanned vectors" now
+  has a ceiling of 1.98× at R = 0.9; a 1.5× result would mean capturing ~50% of the
+  Lagrangian saving. E3/E4 will tell.
+
+**Next**
+- E3 ε sweep (`experiments/04_rule.py`), E4 tune/test protocol with bootstrap, `plots.py`
+  for plots 1–3. Open: whether to add nlist = 1024 early, since the cell-size argument above
+  suggests the histogram shape depends strongly on nlist (extension 3).
 
 ---
 

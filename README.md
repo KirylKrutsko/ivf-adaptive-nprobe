@@ -16,6 +16,7 @@ uv sync            # creates .venv with Python 3.12 and all dependencies
 uv run python experiments/01_build.py   # download SIFT1M, ground truth, build + cache the index (~2 min)
 uv run pytest                            # correctness tests (need the built index)
 uv run python experiments/02_fixed.py   # E1: fixed-nprobe baseline -> results/
+uv run python experiments/03_oracle.py  # E2: per-query curves, both oracles, histogram data (~3 min)
 ```
 
 ## Layout
