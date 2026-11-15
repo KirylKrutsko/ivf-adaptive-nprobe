@@ -50,7 +50,7 @@ def plot_recall_vs_work(curves: pd.DataFrame, head: pd.DataFrame, path: Path) ->
     ax.set_xscale("log")
     ax.set_xlabel("work per query: scanned vectors + 200 re-ranked (log scale)")
     ax.set_ylabel("recall@10 (after re-ranking)")
-    ax.set_title("Recall vs work, SIFT1M test queries", loc="left", color=INK)
+    ax.set_title(f"Recall vs work, SIFT1M test queries (nlist {NLIST})", loc="left", color=INK)
     ax.legend(loc="lower right")
     fig.tight_layout(); fig.savefig(path, dpi=160); plt.close(fig)
 
@@ -120,7 +120,7 @@ def method_curves(cfg: dict) -> pd.DataFrame:
     rows = [c05[c05.method == m][["method", "recall", "work"]] for m in ["fixed", "rule", "oracle_lagrangian", "oracle_perquery"]]
     rows[1] = rows[1].assign(method="ratio")
     # ratio + cap 32 (ε swept) read off the per-query curves
-    env = load_env(); curves, _ = load_curves(res / "03_oracle_curves.npz"); test = subset(curves, env.test)
+    env = load_env(cfg["config_path"]); curves, _ = load_curves(res / "03_oracle_curves.npz"); test = subset(curves, env.test)
     rc = np.load(res / "04_rule_cells.npz")
     cap = [{"method": "ratio_cap32", "recall": at_cells(test, np.minimum(n[env.test], 32))["recall"].mean(),
             "work": at_cells(test, np.minimum(n[env.test], 32))["work"].mean() + kr} for n in rc["n_cells"]]
@@ -139,6 +139,9 @@ STYLES = {"fixed": ("fixed nprobe", FIXED, "-"), "ratio": ("ratio rule (proposal
           "oracle_perquery": ("oracle, every query reaches target", ORACLE, "--")}
 
 
+NLIST = 4096
+
+
 def plot_recall_vs_work_all(mc: pd.DataFrame, stop_head: pd.DataFrame, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for m, (label, color, ls) in STYLES.items():
@@ -153,7 +156,7 @@ def plot_recall_vs_work_all(mc: pd.DataFrame, stop_head: pd.DataFrame, path: Pat
     ax.set_xscale("log"); ax.set_ylim(0.6, 1.0)
     ax.set_xlabel("work per query: scanned vectors + 200 re-ranked (log scale)")
     ax.set_ylabel("recall@10 (after re-ranking)")
-    ax.set_title("Recall vs work, SIFT1M test queries", loc="left", color=INK)
+    ax.set_title(f"Recall vs work, SIFT1M test queries (nlist {NLIST})", loc="left", color=INK)
     ax.legend(loc="lower right", fontsize=9)
     fig.tight_layout(); fig.savefig(path, dpi=160); plt.close(fig)
 
@@ -231,6 +234,7 @@ def plot_tail(tail: pd.DataFrame, path: Path) -> None:
 
 def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     cfg = load_config(cfg_path)
+    global NLIST; NLIST = cfg["index"]["nlist"]
     res = Path(cfg["results_dir"]); out = res / "plots"; out.mkdir(exist_ok=True)
     curves, head = pd.read_csv(res / "05_curves_test.csv"), pd.read_csv(res / "05_tune_test.csv")
     head11 = pd.read_csv(res / "11_stop_rule_rounds.csv")
@@ -240,7 +244,8 @@ def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     plot_rule_vs_oracle(cfg, head, out / "3_rule_vs_oracle.png")
     plot_saving_vs_target_all(head, head11, out / "4_saving_vs_target.png")
     plot_saving_vs_target(head, out / "4b_saving_vs_target_ratio_only.png")
-    plot_timing(pd.read_csv(res / "12_timing.csv"), out / "6_timing.png")
+    if (res / "12_timing.csv").exists():
+        plot_timing(pd.read_csv(res / "12_timing.csv"), out / "6_timing.png")
     plot_tail(pd.read_csv(res / "09_tail_recall.csv"), out / "7_tail_recall.png")
     print("wrote", sorted(p.name for p in out.glob("*.png")))
 

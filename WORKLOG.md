@@ -23,7 +23,54 @@ Status board (updated with every entry):
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
-| Extensions | not started |
+| Extensions | 3 (nlist = 1024) done: `configs/sift1m_nlist1024.yaml`, `results/nlist1024/` |
+
+---
+
+## 2026-11-16 — extension 3: nlist = 1024
+
+**Done.** `configs/sift1m_nlist1024.yaml` (only nlist and `results_dir` differ; `load_config` now
+takes `results_dir` from the config, `plots.py` takes the env from the config path). The whole
+pipeline rerun with the same scripts: 01 → 02 → 03 → 04 → 05 → 08 → 11 → 09 → plots, 5 min total.
+Index: 1 024 cells of 977 vectors on average (318–3 891), k-means 5 s. Timing (12) not rerun.
+
+**Results, test split, tune → test (nlist 4096 in brackets)**
+
+| | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| fixed nprobe needed | 7 (13) | 12 (26) | 21 (45) | 54 (122) |
+| work of fixed nprobe | 7 856 (3 793) | 13 196 (7 299) | 22 660 (12 339) | 56 530 (32 247) |
+| oracle ceiling | 1.61× (1.71×) | 1.86× (1.98×) | 2.23× (2.35×) | 3.79× (3.94×) |
+| ratio rule (proposal) | 0.92× (0.77×) | 0.82× (0.73×) | 0.82× (0.77×) | 0.84× (0.93×) |
+| ratio + cap | 1.05× (1.11×) | 1.10× (1.13×) | 1.12× (1.16×) | 0.96× (1.16×) |
+| fitted static rule | 1.12× (1.13×) | 1.18× (1.19×) | 1.21× (1.23×) | 1.23× (1.33×) |
+| **stopping rule** | **1.25× (1.17×)** | **1.22× (1.25×)** | **1.31× (1.31×)** | **1.40× (1.34×)** |
+| captured share (stopping rule) | 32% (32%) | 38% (35%) | 41% (37%) | 40% (42%) |
+
+Cells needed per query (oracle, target 0.9): median 7 (13), need ≤ 3 cells 26% (14%), need > 20
+cells 12.5% (33%). Tail at the nprobe-12 budget: queries with recall ≤ 0.5 are 3.1% fixed, 4.1%
+ratio, 0.7% stopping rule (4096 at nprobe 26: 2.5 / 5.6 / 0.3%).
+
+**Reading**
+- The proposal's expectation for bigger cells was "more queries are easy, so the saving grows". The
+  first half is true: with ~1 000-vector cells, a quarter of the queries are done in 3 cells and
+  only one in eight needs more than 20. The second half is not: the oracle ceiling is the same or
+  slightly lower (1.86× vs 1.98× at 0.9), and every rule lands within a few points of its nlist-4096
+  value. Easy queries now cost ~1 000 vectors each, hard ones still need tens of cells, and the
+  *ratio* of the two is what the saving is made of.
+- Absolute work doubles at every target (13 196 vs 7 299 at 0.9): nlist = 1024 is simply a worse
+  index for this base, as expected from the Faiss guideline of ~4√N cells. Adaptive nprobe does not
+  change that ranking.
+- The ratio rule is still worse than fixed nprobe (0.82–0.92×), less badly so, because the cap at
+  256 now equals a quarter of the index and the explosion is milder (p99 76 cells at R = 0.9 vs
+  239). Ratio + cap is weaker here and even loses at 0.99 (cap 128 chosen on tune, 0.96× on test).
+- The stopping rule is the only method whose saving is stable across the two indexes
+  (1.22–1.40×, 32–41% of the oracle), which is the kind of robustness the report can claim for it.
+
+Figures for this run are in `results/nlist1024/plots/` (same names; no 6_timing).
+
+**Next**: add §10 to `report/results.md` (done in this commit). Remaining optional items: second
+dataset, timing for nlist 1024, coarser round schedule for the stopping rule.
 
 ---
 

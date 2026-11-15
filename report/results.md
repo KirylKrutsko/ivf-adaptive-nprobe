@@ -169,11 +169,37 @@ plain Faiss p50 0.67 ms, p99 2.3 ms; stopping rule p50 4.5 ms, p99 11 ms (Python
 | The saving grows with the recall target | **Yes**, for every method: oracle 1.7× → 3.9×, stopping rule 1.17× → 1.34×, capped rule 1.11× → 1.16×. |
 | The saving in time is smaller than in scanned vectors | **Yes.** Capped rule: 1.13× work → 1.17× time only because our path is already faster than plain `index.search`; stopping rule: 1.25× work → 0.35× time in the Python prototype. |
 
-## 9. Limitations
+## 9. Extension: nlist = 1 024 (bigger cells)
 
-- One dataset and one index. The geometry argument (neighbours spread over ~244-vector cells,
-  cell boundaries far below neighbour distances) suggests the picture depends on nlist and on the
-  data; nlist = 1 024 and a second dataset were planned as extensions and not done.
+The same pipeline on an index with 1 024 cells (977 vectors each on average, four times bigger).
+Fixed nprobe needs 7 / 12 / 21 / 54 cells for the four targets, and about twice the work of the
+4 096-cell index at every target (13 196 vs 7 299 at R = 0.9), so this is a worse index for SIFT1M,
+as the usual √N-to-4√N guideline predicts. What changes for the adaptive question:
+
+| | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| queries done in ≤ 3 cells (oracle, target 0.9) | 26% (was 14%) | | | |
+| queries needing > 20 cells | 12.5% (was 33%) | | | |
+| oracle ceiling | 1.61× (1.71×) | 1.86× (1.98×) | 2.23× (2.35×) | 3.79× (3.94×) |
+| ratio rule (proposal) | 0.92× (0.77×) | 0.82× (0.73×) | 0.82× (0.77×) | 0.84× (0.93×) |
+| ratio rule + cap | 1.05× (1.11×) | 1.10× (1.13×) | 1.12× (1.16×) | 0.96× (1.16×) |
+| stopping rule | 1.25× (1.17×) | 1.22× (1.25×) | 1.31× (1.31×) | 1.40× (1.34×) |
+| captured share, stopping rule | 32% | 38% | 41% | 40% |
+
+The proposal expected bigger cells to make more queries easy and therefore the saving larger. The
+first part happens: with 1 000-vector cells a quarter of the queries are finished after 3 cells. The
+second does not: the oracle's ceiling and every rule's saving stay within a few points of their
+4 096-cell values. An easy query now costs ~1 000 scanned vectors instead of ~250, hard queries
+still need tens of cells, and the saving is made of the ratio between the two, which the cell
+size does not change. The ratio rule remains worse than fixed nprobe (0.82–0.92×); the capped
+version is weaker here and loses at R = 0.99; the stopping rule is the one method whose saving is
+stable across the two indexes (1.22–1.40×, 32–41% of the oracle).
+
+## 11. Limitations
+
+- One dataset and two values of nlist (4 096 and 1 024, §10). A second dataset was planned as an
+  extension and not done; the geometry argument (neighbours spread over many cells, cell boundaries
+  far below neighbour distances) suggests the picture depends on the data's intrinsic dimension.
 - The cap of 256 cells is a second parameter of every rule; the proposed rule hits it for 28% of
   queries at R = 0.99, the stopping rule for fewer.
 - With k = 10, per-query recall moves in steps of 0.1, so per-query targets 0.95 and 0.99 mean

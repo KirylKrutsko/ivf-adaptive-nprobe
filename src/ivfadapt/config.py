@@ -18,5 +18,6 @@ def load_config(path: str | Path = "configs/sift1m.yaml") -> dict[str, Any]:
     with open(path) as f:
         cfg = yaml.safe_load(f)
     cfg["data_dir"] = str(REPO_ROOT / cfg["data_dir"])
-    cfg.setdefault("results_dir", str(REPO_ROOT / "results"))
+    cfg["results_dir"] = str(REPO_ROOT / cfg.get("results_dir", "results"))
+    cfg["config_path"] = str(path)
     return cfg
