@@ -4,7 +4,8 @@ queries better than fixed nprobe, even though it loses on the mean?
 For the fixed-nprobe work levels tuned in E4 (nprobe 13 / 26 / 45 / 122), each other method's
 parameter is chosen so that its mean work on the test split matches (closest grid point).
 Reported: mean recall, share of queries with recall 0, <= 0.5, p10 of per-query recall.
-Methods: fixed, ratio rule, ratio + cap 32, fitted rule (08, fit on tune), Lagrangian oracle.
+Methods: fixed, ratio rule, ratio + cap 32, fitted rule (08, fit on tune), stopping rule (11, model
+fitted on tune for R = 0.9, theta swept), Lagrangian oracle.
 Writes results/09_tail_recall.csv.
 """
 
@@ -19,6 +20,7 @@ import pandas as pd
 from ivfadapt.env import load_env
 from ivfadapt.oracle import at_cells, lagrangian_curve, load_curves, subset
 from ivfadapt.rules import quantizer_topk
+from ivfadapt.stoprule import LogisticModel, cells_from_P, run_rounds, static_features
 
 sys.path.insert(0, str(Path(__file__).parent))
 from importlib import import_module
@@ -39,12 +41,18 @@ def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     pred = fitted.ridge_fit(X[env.tune], np.log(lag_tune["cells"][j].astype(float)))
     p_te = np.exp(pred(X[env.test]))
     lag_test = lagrangian_curve(test)
+    model = LogisticModel.load(out / "11_stop_model_R0.9.npz")
+    static = static_features(Dq, Iq, env.list_sizes)
+    rec = run_rounds(env.index, env.xq[env.test], Dq[env.test], Iq[env.test], static[env.test], env.k, kr)
+    P = model.predict(rec["features"].reshape(-1, rec["features"].shape[2])).reshape(len(env.test), -1)
+    thetas = np.concatenate([np.geomspace(1e-6, 0.02, 40), np.linspace(0.025, 0.99, 80)])
 
     families = {
         "fixed": [np.full(len(env.test), c) for c in range(1, C + 1)],
         "ratio": list(rule_cells),
         "ratio_cap32": [np.minimum(r, 32) for r in rule_cells],
         "fitted (08)": [np.clip(np.rint(g * p_te), 1, C).astype(int) for g in np.geomspace(0.05, 20, 200)],
+        "stopping rule (11)": [cells_from_P(P, t) for t in thetas],
         "oracle_lagrangian": list(lag_test["cells"].astype(int)),
     }
     rows = []

@@ -18,12 +18,37 @@ Status board (updated with every entry):
 | E3 ε sweep | done (`results/04_rule*`) |
 | E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
 | E5 timing | done (`results/12_*`): work saving does not become time in the Python prototype |
-| Plots | plots 1–5 done (`results/plots/`) |
+| Plots | 1, 1b, 2, 3, 4, 4b, 5, 6, 7 (`results/plots/`), structure B |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
 | Extensions | not started |
+
+---
+
+## 2026-11-16 — plots for structure B
+
+`experiments/plots.py` extended (Kiryl's plots kept; the proposal-only versions saved as 1b / 4b).
+`09_tail_recall.py` now includes the stopping rule. Figures, in the order the report would use them:
+
+| file | shows | source |
+|---|---|---|
+| `1_recall_vs_work.png` | recall vs work on test for fixed, ratio, ratio + cap 32, fitted static, stopping rule, both oracles | 05, 04 + 03, 08, 11 |
+| `2_cells_needed_hist.png` | cells each query needs (oracle), targets 0.9 and 1.0 | 03 |
+| `3_rule_vs_oracle.png` | ratio rule cells vs oracle cells per query, Spearman 0.70 | 04, 03 |
+| `4_saving_vs_target.png` | saving vs fixed at each target, tuned on tune, 95% CI: ratio, ratio + cap, stopping rule, oracle | 05, 11 |
+| `5_rule_within_nprobe.png` | Kiryl's side experiment, min(rule, nprobe) | 06 |
+| `6_timing.png` | E5: time per query by component at R = 0.9 incl. the 26-call control; work saving vs speed-up by target | 12 |
+| `7_tail_recall.png` | share of queries with recall ≤ 0.5 at equal mean work, budgets of nprobe 13 and 26 | 09 |
+
+Plot 1 reads: the stopping rule and the fitted static rule lie left of fixed nprobe everywhere and
+almost on top of each other up to 0.95, the stopping rule pulling ahead above; the ratio rule is
+right of fixed at every recall; the cap-32 curve ends at 0.927 (its ceiling).
+Plot 7 reads: at the nprobe-26 budget the stopping rule leaves 0.3% of queries at recall ≤ 0.5 vs
+2.5% for fixed nprobe and 5.6% for the ratio rule.
+
+**Next**: results table and text for the report (structure B); nlist = 1024 if time allows.
 
 ---
 
