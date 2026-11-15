@@ -27,6 +27,30 @@ Status board (updated with every entry):
 
 ---
 
+## 2026-11-16 — FORK POINT: report structure (decision pending with Kiryl)
+
+Everything up to here is tagged **`fork-report-structure`** (git tag). Two ways to frame the
+report from this state; the code and results are the same for both, only the emphasis differs.
+
+- **A. "The proposed rule, diagnosed and repaired"**: ratio rule (negative result) → why →
+  ratio + cap as the fix (1.1×, works in time too) → the oracle as the ceiling; the stopping
+  rule as an extension (6).
+- **B. "Adaptive nprobe: what is achievable from what the search knows"** (Matvei's choice,
+  proceeding with it from here): ratio rule (negative) → diagnosis → ratio + cap and the fitted
+  rule as the limit of centroid-distance information (~1.1–1.2×) → the stopping rule on scan
+  feedback as the main method (1.25–1.34×, a third of the oracle saving; time gain needs an
+  in-library implementation) → oracle ceiling and why the rest is unobservable.
+
+Both answer RQ1/RQ2 of the proposal; the topic (per-query number of cells for IVF+PQ, same
+index, oracle, metrics and tune/test protocol) is unchanged. To go back to A: `git checkout
+fork-report-structure`, or simply reorder the sections; nothing after this point removes results.
+
+Work from here (structure B): plots for the new structure (plot 1 with stopping rule and
+ratio + cap, time vs recall from E5, tail recall), a results table for the report, then
+nlist = 1024 if time allows.
+
+---
+
 ## 2026-11-16 (later) — stopping rule made implementable, bootstrap CIs, E5 timing
 
 **Done**
