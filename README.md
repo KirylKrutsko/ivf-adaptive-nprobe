@@ -22,6 +22,8 @@ uv run python experiments/05_tune_test.py  # E4: tune/test, RQ1/RQ2 with bootstr
 uv run python experiments/plots.py      # plots 1-4 -> results/plots/
 uv run python experiments/06_rule_within_nprobe.py         # side exp.: min(rule(ε), nprobe), plot 5
 uv run python experiments/06_rule_within_nprobe_timing.py  # its wall-clock check (single thread)
+uv run python experiments/07_rules_explore.py   # alternative rules (bounds, two-stage, patience) on tune (~7 min)
+uv run python experiments/08_fitted_rule.py     # extension 6: rule fitted to the oracle, tune -> test
 ```
 
 ## Layout

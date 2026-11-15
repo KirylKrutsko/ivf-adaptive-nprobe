@@ -20,7 +20,84 @@ Status board (updated with every entry):
 | E5 timing | not started |
 | Plots | plots 1–5 done (`results/plots/`) |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
+| Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Extensions | not started |
+
+---
+
+## 2026-11-15 (night) — alternative cell-selection rules: none beats fixed nprobe by much
+
+**Question (Kiryl).** The ratio rule loses to fixed nprobe. Are there other ways to tell useful
+cells from useless ones at query time? In particular a two-stage search: scan a few cells,
+take the current 10th-neighbour distance r, then scan every cell whose *boundary* is closer
+than r.
+
+**Done**
+- `rules.bisector_bounds`: for each of the 256 nearest cells, a valid lower bound on the distance
+  from the query to any vector stored in that cell: the distance from q to the bisector
+  hyperplane of (c_i, c_j), (D_j − D_i)/(2‖c_j − c_i‖), maximised over all nearer centroids i.
+  Checked on 1200 (query, cell) pairs: 0 violations. `rules.compact_cells` packs an arbitrary
+  cell mask for `search_preassigned` (non-prefix rules need the real search path).
+- `experiments/07_rules_explore.py` (**tune split only**, 1108 rule evaluations, 7 min): prefix
+  rules are read off the E2 curves, the others run through the real search. One sequential pass
+  records after every cell the exact 10th-candidate distance r₁₀(c) and whether the exact
+  top-10 changed (`results/07_tune_sequential.npz`), so patience / stopping rules are prefix
+  rules too.
+- `experiments/08_fitted_rule.py` (extension 6, **fit on tune, evaluate on test**): ridge
+  regression from 17 features (log d_j/d_1 at 15 ranks, log d_1, log mean size of the 8 nearest
+  lists) to log oracle cells; allocation γ·exp(prediction), γ swept; shuffled control.
+
+**Results: work saving vs fixed nprobe at matched mean recall** (tune split, so slightly
+optimistic for one-parameter rules and more so for envelopes over a second parameter):
+
+| rule | @0.8 | @0.9 | @0.95 | @0.99 | note |
+|---|---|---|---|---|---|
+| ratio (proposal) | 0.80 | 0.76 | 0.79 | 0.93 | reference |
+| ratio + cap, envelope over C ∈ {16,32,48,128} | 1.07 | 1.11 | 1.15 | 1.18 | Kiryl's capped rule |
+| patience m (stop after m cells without a top-10 change) | 1.05 | 1.10 | 1.14 | – | Li et al.-style, no learning |
+| bound_stop α (stop when next cell's bound > α·r₁₀, r updated) | 0.95 | 1.00 | 1.05 | 1.19 | Kiryl's idea, iterative form |
+| two-stage (c0 cells, then all cells with bound ≤ α·r), envelope c0 ∈ {1,2,4,8} | 1.00 | 0.94 | 0.96 | 1.11 | Kiryl's idea, literal form |
+| gap d_j − d_1 ≤ δ | 0.88 | 0.90 | 0.94 | 1.08 | extension 4 |
+| bound threshold (bmax ≤ τ, absolute / relative to d_1) | 0.86 / 0.83 | 0.85 / 0.81 | 0.88 / 0.85 | 1.01 / 1.01 | |
+| c cells in order of bound instead of centroid distance | 0.96 | 0.94 | 0.92 | 0.83 | worse ordering |
+
+Fitted rule, tune → **test** (`08_fitted_savings.csv`); fixed-nprobe work on test 3422 / 6706 / 11507 / 31498:
+
+| fit target | Spearman vs oracle c*(0.9) | @0.8 | @0.9 | @0.95 | @0.99 |
+|---|---|---|---|---|---|
+| Lagrangian cells at R = 0.9 | 0.72 | 1.13 | **1.19** | 1.23 | 1.33 |
+| Lagrangian cells at R = 0.95 | 0.75 | 1.11 | 1.19 | 1.25 | 1.40 |
+| per-query c*(0.8) | 0.75 | 1.06 | 1.14 | 1.22 | 1.41 |
+| same counts, shuffled over queries | – | 0.86 | 0.82 | 0.78 | 0.68 |
+| oracle (Lagrangian) ceiling | – | 1.71 | 1.98 | 2.35 | 3.94 |
+
+Captured share of the oracle saving by the best fitted rule at R = 0.9: (1 − 1/1.19)/(1 − 1/1.98) ≈ 32%.
+
+**Why the boundary idea does not work here (the important finding).**
+- The bound is valid but loose: in the median it is **20% of the true distance** to the nearest
+  vector of the cell (max 70%). In 128-d the 10th true neighbour is about as far as the nearest
+  centroid (median r₁₀ = 226 vs d_1 = 213), while the distance to a neighbouring cell's boundary
+  is 10–70. So "bound ≤ r" is true for almost every cell and prunes nothing; the usable α are
+  0.1–0.2, at which the bound is just another heuristic score, and a slightly worse one than the
+  centroid-distance ratio. Branch-and-bound pruning dies of the curse of dimensionality.
+- All centroid-geometry scores rank queries by difficulty about equally well (Spearman 0.70–0.77
+  with the oracle) and far from perfectly. The gain from calibrating the mapping score → cells
+  (cap, patience, fitted) is real but small: ~1.1–1.2× at R = 0.9 against a 2× ceiling. Most of
+  a query's difficulty is not visible in its centroid distances.
+- The ratio rule's specific failure (explosive cell counts for flat profiles) is a calibration
+  problem; any cap or fit removes it, and that is where the ~1.1× comes from.
+
+**Recommendation for the report**
+- Headline: the proposed rule does not save work; capped/calibrated variants save 10–20%;
+  the oracle shows 2–4× is possible but not from centroid distances alone.
+- Quote the tune→test numbers (E4 capped rule, 08 fitted rule), not the tune-split exploration.
+- If one more experiment: nlist = 1024 (extension 3). With ~1000 vectors per cell more queries
+  may be truly easy and the geometry signal may be stronger; the whole pipeline is reusable.
+
+**Next**
+- Both: decide the report's framing. Candidate for the "method" the report evaluates beyond the
+  plain rule: the fitted rule (two lines of NumPy, no model), with ratio+cap as the simple variant.
+- Proper tune→test E4-style run for patience and bound_stop if they go in the report.
 
 ---
 
