@@ -219,7 +219,8 @@ def plot_tail(tail: pd.DataFrame, path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.9), sharey=True)
     order = [("fixed", "fixed\nnprobe", FIXED), ("ratio", "ratio\nrule", RULE), ("ratio_cap32", "ratio\n+ cap 32", CAP),
              ("fitted (08)", "fitted\nstatic", FITTED), ("stopping rule (11)", "stopping\nrule", STOP), ("oracle_lagrangian", "oracle", ORACLE)]
-    for ax, lvl in zip(axes, [13, 26]):
+    levels = sorted(tail.nprobe_level.unique())[:2]
+    for ax, lvl in zip(axes, levels):
         d = tail[tail.nprobe_level == lvl].set_index("method")
         vals = [100 * d.loc[m, "share_recall_le_0.5"] for m, _, _ in order]
         ax.bar([l for _, l, _ in order], vals, color=[c for _, _, c in order], width=0.65)
@@ -227,7 +228,7 @@ def plot_tail(tail: pd.DataFrame, path: Path) -> None:
             ax.text(i, v + 0.2, f"{v:.1f}%\nR={d.loc[m, 'recall_mean']:.3f}", ha="center", va="bottom", fontsize=7.5, color=INK2)
         ax.set_title(f"budget of fixed nprobe {lvl} (work ≈ {d.loc['fixed', 'work']:.0f})", loc="left", color=INK, fontsize=10)
     axes[0].set_ylabel("queries with recall@10 ≤ 0.5 (%)")
-    axes[0].set_ylim(0, tail[tail.nprobe_level == 13]["share_recall_le_0.5"].max() * 100 * 1.35)
+    axes[0].set_ylim(0, tail[tail.nprobe_level == levels[0]]["share_recall_le_0.5"].max() * 100 * 1.35)
     fig.suptitle("Badly served queries at equal mean work (test split)", x=0.01, ha="left", color=INK)
     fig.tight_layout(); fig.savefig(path, dpi=160); plt.close(fig)
 
