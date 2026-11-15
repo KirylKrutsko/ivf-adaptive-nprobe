@@ -20,6 +20,8 @@ uv run python experiments/03_oracle.py  # E2: per-query curves, both oracles, hi
 uv run python experiments/04_rule.py    # E3: ε sweep of the ratio rule (read off the E2 curves, checked vs real search)
 uv run python experiments/05_tune_test.py  # E4: tune/test, RQ1/RQ2 with bootstrap CIs
 uv run python experiments/plots.py      # plots 1-4 -> results/plots/
+uv run python experiments/06_rule_within_nprobe.py         # side exp.: min(rule(ε), nprobe), plot 5
+uv run python experiments/06_rule_within_nprobe_timing.py  # its wall-clock check (single thread)
 ```
 
 ## Layout

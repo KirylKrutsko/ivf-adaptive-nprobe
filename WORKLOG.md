@@ -18,8 +18,73 @@ Status board (updated with every entry):
 | E3 ε sweep | done (`results/04_rule*`) |
 | E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
 | E5 timing | not started |
-| Plots | plots 1–4 done (`experiments/plots.py` → `results/plots/`) |
+| Plots | plots 1–5 done (`results/plots/`) |
+| Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Extensions | not started |
+
+---
+
+## 2026-11-15 (evening) — side experiment: the rule as a drop-in, min(rule(ε), nprobe)
+
+**Question.** Keep the usual nprobe for hard queries and let the rule only *remove* cells from easy
+ones: each query scans `min(n_rule(ε), nprobe)` cells. How much work/time does it save, and how
+much recall does it lose? This is a different view of the capped rule (cap C = nprobe), not
+the fixed-recall comparison of E4.
+
+**Done**
+- `experiments/06_rule_within_nprobe.py`: for the E4-tuned nprobe values {13, 26, 45, 122}
+  and every ε of the E3 grid, on the test split: recall, work, recall drop and work saving vs
+  plain nprobe, and the **control**: work plain IVF needs for the *same* recall by lowering
+  nprobe for everyone (`frontier_gain` = that work / rule work; > 1 means the rule beats just
+  lowering nprobe). Plot 5 (`results/plots/5_rule_within_nprobe.png`): ε traces vs fixed curve.
+- `experiments/06_rule_within_nprobe_timing.py`: wall clock, single thread, median of 5, re-ranking
+  included, at the SAME nprobe (so the rule's recall is slightly lower).
+
+**Results (test split; work = ndis + 200)**
+
+At ε = 0.238 / 0.286 (tuned for the uncapped / cap-32 rule in E4, far too aggressive here):
+
+| nprobe (recall) | ε | recall | drop | work saving | queries trimmed | frontier_gain |
+|---|---|---|---|---|---|---|
+| 13 (0.809) | 0.238 / 0.286 | 0.778 / 0.794 | 0.031 / 0.015 | 1.25× / 1.16× | 34% / 23% | 1.06 / 1.07 |
+| 26 (0.907) | 0.238 / 0.286 | 0.855 / 0.882 | 0.052 / 0.025 | 1.50× / 1.32× | 54% / 39% | 1.03 / 1.09 |
+| 45 (0.953) | 0.238 / 0.286 | 0.886 / 0.921 | 0.068 / 0.033 | 1.88× / 1.53× | 71% / 54% | 0.94 / 1.03 |
+| 122 (0.990) | 0.238 / 0.286 | 0.903 / 0.947 | 0.087 / 0.043 | 3.51× / 2.41× | 94% / 84% | 0.77 / 0.85 |
+
+The large raw savings are mostly "fewer cells", not "better cells": at nprobe 122 lowering
+nprobe for everyone is cheaper than the rule at the same recall.
+
+Best frontier_gain over the ε grid (**ε chosen on test, so slightly optimistic**):
+
+| nprobe | ε | recall drop | work saving | frontier_gain | time, vs plain at same nprobe |
+|---|---|---|---|---|---|
+| 13 | 0.329 | 0.007 | 1.12× | 1.07 | – |
+| 26 | 0.329 | 0.012 | 1.22× | 1.11 | 1.08× |
+| 45 | 0.378 | 0.007 | 1.25× | 1.13 | 1.10× |
+| 122 | 0.547 | 0.001 | 1.20× | 1.17 | 1.12× |
+
+Largest work saving with recall drop ≤ 0.01: 1.13× (nprobe 13), 1.20× (26), 1.28× (45), 1.60× (122);
+frontier_gain of those points 1.07 / 1.11 / 1.13 / 1.06.
+
+**Reading**
+- Same method family as the capped rule of the previous entry (`min(rule(ε), C)`), seen from the
+  other side: there the recall target was fixed and (ε, C) tuned on tune; here C = nprobe and ε is
+  swept. Both reach the same envelope: frontier gain 1.07 / 1.11 / 1.13 / 1.17 here vs capped-rule
+  savings 1.05 / 1.07 / 1.12 / 1.18 (tuned on tune: **quote those** in the report). The tuned
+  caps (16 / 32 / 48 / 128) are close to the nprobe for each target (13 / 26 / 45 / 122), which is
+  why the two agree.
+- The rule only reliably identifies *clearly easy* queries: the useful ε (0.33–0.55) trims just
+  17–32% of queries, and the useful ε grows with nprobe. In plot 5 each trace rises slightly
+  above the fixed curve just before its nprobe point and falls below it as ε shrinks.
+- Time saving < work saving (1.22× work → 1.08× time at nprobe 26), as the proposal predicted.
+  Likely cause: per-query costs that do not shrink with cells (4096-centroid quantizer, 200-candidate
+  re-rank, Python grouping); not yet measured separately (E5). The preassigned path itself costs
+  the same as `index.search` (0.140 vs 0.141 ms/query). The matched-recall comparison exists only
+  in work; it was not timed.
+
+**Next**
+- If this framing goes in the report: choose ε on tune (per nprobe), not on test.
+- E5: split per-query time into quantizer / rule / scan / re-rank to see what limits the time saving.
 
 ---
 
