@@ -37,6 +37,7 @@ uv run python experiments/12_timing.py          # E5: single-thread timing at ma
 uv run python experiments/13_transfer.py        # stopping rule across datasets: weights, transfer without refit, one joint model
 uv run python experiments/14_compact_rule.py    # 3-feature stopping rule and its closed form: d_next/d1 < K (r10/d1)^p c^q
 uv run python experiments/15_stoprule_verify.py   # live check of the compact rule + feature ablation, tuned savings with CIs
+uv run python experiments/16_fitted_rule_tuned.py   # static fitted rule tune->test with CIs, live check and timing
 ```
 
 ## Layout

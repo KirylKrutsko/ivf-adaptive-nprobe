@@ -17,14 +17,67 @@ Status board (updated with every entry):
 | E2 oracle + histogram | done (`results/03_oracle_*`) |
 | E3 ε sweep | done (`results/04_rule*`) |
 | E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
-| E5 timing | done (`results/12_*`): work saving does not become time in the Python prototype |
+| E5 timing | done (`results/12_*`), rerun 2026-11-16 on Kiryl's machine (quoted in the report): capped rule 1.03–1.09×, stopping rule 0.27–0.33× |
 | Plots | 1, 1b, 2, 3, 4, 4b, 5, 6, 7 (`results/plots/`), structure B |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
+| Fitted static rule, tune → test + live + timing | done (`16_fitted_rule_tuned.py`, SIFT1M): 1.16 / 1.23 / 1.30 / 1.38×, **equal to the stopping rule** |
 | Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 — report brought up to date; fitted static rule tuned → test; timing rerun (Kiryl)
+
+**Done**
+- `experiments/16_fitted_rule_tuned.py`: the static fitted rule of 08 with the protocol of every
+  other row of §1: one ridge model per target (labels = Lagrangian oracle on tune at mean recall
+  R), scale γ chosen on tune by 2-fold cross-fitting, tuned saving vs the fixed nprobe chosen on
+  tune, bootstrap CIs; plus a live run (quantizer, features, prediction, one scan call, re-rank)
+  with timing.
+- `12_timing.py` rerun on my machine with nothing else running.
+- `report/results.md` updated (details below).
+
+**Results**
+
+Fitted static rule, SIFT1M test, tuned saving [95% CI]: **1.16 [1.15, 1.17] / 1.23 [1.22, 1.25] /
+1.30 [1.28, 1.32] / 1.38 [1.36, 1.40]** at R = 0.8 / 0.9 / 0.95 / 0.99. Stopping rule (11):
+1.17 / 1.25 / 1.31 / 1.34. **Equal within the CIs up to 0.95, and the static rule is better at
+0.99** (CIs do not overlap). Live run: recall equals the curve-read value for every query (0
+mismatches), cells identical. 08's single model fitted at R = 0.9 gave 1.13 / 1.19 / 1.23 / 1.33
+curve-based; fitting per target is what closes the gap, mostly at 0.99.
+
+Timing rerun (single thread, ms per query at R = 0.9): plain 0.141, preassigned path 0.142
+(0.99×, not 1.10×), re-rank 0.039 for every method (no 0.21 vs 0.13 discrepancy), no R = 0.99
+outlier. Speed-up vs plain: capped rule 1.03 / 1.05 / 1.04 / 1.09×; stopping rule 0.30 / 0.28 /
+0.27 / 0.33×; fitted static rule 0.76 / 0.83 / 0.93 / 1.15× (its 256-centroid quantizer call costs
+0.047 ms vs 0.009 for 26). Latency b = 1: plain p50 0.20 / p99 0.24 ms, stopping rule 1.42 / 2.10 ms.
+
+**What this changes in the report (all edited in `report/results.md`)**
+- §1: fitted-rule row now tuned → test with CIs; compact-formula row added; time column from the
+  rerun; "in words" no longer says scan feedback beats centroid distances; recall-overshoot
+  sentence corrected (fixed nprobe overshoots by up to 0.009, the ratio rule by 0.012; the old
+  "within 0.004" was not true for those two).
+- §4: title 1.2–1.4×; per-target fit described; "~1.2× is the limit of centroid distances"
+  removed; the min(rule, nprobe) side experiment (06, Figure 5) added.
+- §5: the comparison with the static rule rewritten (not better on SIFT1M); the cause of the
+  live-vs-curves recall gap marked as likely, not verified.
+- §6: the "top-10 is still moving" sentence aligned with the ablation.
+- §7: table and text from the rerun, fitted rule added, the earlier run's discrepancies noted.
+- §8: rows updated (time prediction: Yes, with the rerun numbers).
+- §10: the comparison of the two 26-feature weight vectors dropped (features are collinear, weights
+  not identifiable); the compact constants compared instead.
+- Setup: the PQ ceiling after re-ranking (recall 0.996 vs coverage 0.999). §11: three limitations.
+
+**Decision needed (both).** Structure B made the stopping rule the main method because it was
+ahead of the static rule. Measured the same way it is not: on SIFT1M the two are equal, the static
+rule is ahead at 0.99, and neither saves time below 0.99 in our implementation. What is still
+unique to the stopping rule: the interpretable closed form (§5), robustness across nlist and
+datasets (§9–10, not yet compared with the static rule there), and the tail result.
+Before choosing: run `16_fitted_rule_tuned.py configs/deep1m.yaml` and `configs/sift1m_nlist1024.yaml`
+(Deep1M is where the stopping rule is strongest, 1.65× at 0.99).
 
 ---
 
