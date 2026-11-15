@@ -27,6 +27,43 @@ Status board (updated with every entry):
 
 ---
 
+## 2026-11-16 — is the stopping rule universal across datasets? (Kiryl's question)
+
+`experiments/13_transfer.py`, R = 0.9 models from 11 (results in `results/13_transfer*.csv`).
+
+1. **Weights.** Cosine similarity of the standardised logistic weights fitted on SIFT1M and on
+   Deep1M: 0.84. The large weights agree in sign and size: log d_192/d_1 (−3.5 / −6.0), log c
+   (−2.6 / −2.2), log d_256/d_1 (+2.2 / +4.6), log d_next/d_1 (−1.3 / −1.8), log r10/d_next
+   (+1.3 / +1.9), rounds since the last top-10 change (−0.6 / −0.8). Differences sit in the
+   mid-rank static ratios (d_64, d_128), which are collinear with their neighbours, so single
+   weights there are not meaningful.
+2. **Transfer without refit.** Each model applied to the other dataset's test split:
+
+   | model | evaluated on | saving @0.8 / 0.9 / 0.95 / 0.99 | recall at the model's own θ |
+   |---|---|---|---|
+   | SIFT → SIFT | SIFT | 1.15 / 1.21 / 1.26 / 1.49 | 0.903 |
+   | SIFT → Deep | Deep | 1.13 / 1.26 / 1.43 / 1.77 | **0.68** |
+   | Deep → SIFT | SIFT | 1.14 / 1.19 / 1.24 / 1.47 | **0.96** (2× the work) |
+   | Deep → Deep | Deep | 1.15 / 1.27 / 1.44 / 1.81 | 0.901 |
+
+   The *curves* transfer: a model trained on the other dataset loses ≤ 0.02 of saving at every
+   target. The *threshold* does not: at θ = 0.123 the SIFT model on Deep stops far too early
+   (recall 0.68) and the Deep model on SIFT far too late (0.96, twice the work). Same ranking of
+   "should I continue", different calibration of P.
+3. **One joint model** fitted on both tune splits with one θ chosen on the pooled tune (0.123):
+   recall 0.904 on SIFT test, 0.901 on Deep test, savings 1.14 / 1.20 / 1.26 / 1.49 (SIFT) and
+   1.15 / 1.28 / 1.45 / 1.81 (Deep), i.e. equal to the per-dataset models. Saved as
+   `results/13_joint_model_R0.9.npz`.
+
+**Answer.** Yes, the rule is close to dataset-independent: the same 26 standardised features with
+nearly the same weights work on both datasets, and a single model with a single threshold trained
+on both reaches the target on both with no loss. What is not transferable is the threshold of a
+model trained on one dataset alone; a new dataset needs either a few hundred tune queries to pick
+θ (no refit) or a model trained on more than one dataset. For the report: the joint model is the
+one to present if "universal" matters; its numbers are the same as the per-dataset ones.
+
+---
+
 ## 2026-11-16 — extension 1: second dataset, Deep1M
 
 **Done.** Deep1M = the first 1M vectors of Yandex DEEP (96-d, unit-norm, L2), fetched from the

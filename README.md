@@ -34,6 +34,7 @@ uv run python experiments/12_timing.py          # E5: single-thread timing at ma
 # every script takes a config path; the extensions are the same pipeline with another config:
 #   uv run python experiments/<script>.py configs/sift1m_nlist1024.yaml   -> results/nlist1024/   (nlist = 1024)
 #   uv run python experiments/<script>.py configs/deep1m.yaml            -> results/deep1m/      (Deep1M, 96-d; downloads 388 MB)
+uv run python experiments/13_transfer.py        # stopping rule across datasets: weights, transfer without refit, one joint model
 ```
 
 ## Layout

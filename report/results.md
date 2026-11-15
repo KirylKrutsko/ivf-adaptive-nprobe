@@ -219,6 +219,16 @@ The ratio rule of the proposal is below fixed nprobe at R ≤ 0.95 here as well,
 R = 0.99 (1.15×), the one configuration in the project where it does; there fixed nprobe needs 134
 cells for everyone, and the rule reaches the 256-cell cap for 27% of queries.
 
+Is the stopping rule tied to the dataset it was fitted on? The two fitted models have similar
+weights (cosine 0.84 after standardisation; the same six features dominate with the same signs),
+and a model fitted on one dataset, run on the other without refitting, loses at most 0.02 of
+saving at every target. What does not transfer is the threshold: the SIFT model's θ stops Deep
+queries far too early (recall 0.68) and the Deep model's θ stops SIFT queries too late (0.96, twice
+the work). A single model fitted on both tune splits with one threshold reaches 0.904 on SIFT and
+0.901 on Deep at the same θ with the same savings as the per-dataset models (1.20× and 1.28× at
+R = 0.9), so one rule serves both datasets; a new dataset needs a few hundred tune queries to set θ,
+not a new model.
+
 ## 11. Limitations
 
 - Two datasets (SIFT1M, Deep1M) and two values of nlist on SIFT1M. Both datasets are dense
