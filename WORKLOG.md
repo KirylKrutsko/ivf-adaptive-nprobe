@@ -17,13 +17,95 @@ Status board (updated with every entry):
 | E2 oracle + histogram | done (`results/03_oracle_*`) |
 | E3 ε sweep | done (`results/04_rule*`) |
 | E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
-| E5 timing | not started |
+| E5 timing | done (`results/12_*`): work saving does not become time in the Python prototype |
 | Plots | plots 1–5 done (`results/plots/`) |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
-| Scan-feedback stopping rule (fitted) | done, tune→test (`results/10_*`), **best so far: 1.22× at R = 0.9** |
+| Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
 | Extensions | not started |
+
+---
+
+## 2026-11-16 (later) — stopping rule made implementable, bootstrap CIs, E5 timing
+
+**Done**
+- `src/ivfadapt/stoprule.py`: the stopping rule in a form a real search can run. Cells are
+  scanned in rounds (`SCHEDULE`: 1, 2, 3, 4, 5, 6, 8, 10, …, 224, 256; 26 decision points).
+  After each round the features come from **PQ distances only** (best and 10th PQ candidate vs
+  d_1 and vs the next centroid, PQ top-10 changes, candidates entering the top-200, rounds since
+  the last change, r10 improvement, the 17 static features): no re-ranking until the end, unlike
+  the per-cell exact version of 10. One function `run_rounds` generates training features
+  (everyone runs to the end), does inference, and is what gets timed, so train/serve cannot
+  diverge. `tests/test_stoprule.py` (28 tests total): online stopping == offline decision from
+  recorded P; the re-ranked result equals the oracle curves at n_cells.
+- `experiments/11_stop_rule_rounds.py`: E4 protocol for it. Model fitted on tune (labels: the
+  Lagrangian oracle at R continues past the boundary); θ chosen on tune from 2-fold
+  cross-fitted predictions (largest θ still reaching R); baselines (fixed nprobe; ratio rule with
+  cap ∈ {16, 32, 48, 128}, ε and cap tuned on tune) the same way; bootstrap 95% CIs over test
+  queries (1000 resamples). Parameters saved to `results/11_params.json` for the timing.
+- `experiments/12_timing.py` (E5): single thread, 5000 test queries in one batch, warm-up +
+  median of 5, components separated; batch-size-1 latency at R = 0.9. Rerun on a quiet machine
+  (the first run overlapped a background job and had outliers).
+- `oracle.sequential_features` now also records the PQ-based quantities (cache recomputed; the
+  per-cell exact results of 10 are unchanged).
+
+**Results on test, parameters tuned on tune (work = ndis + 200)**
+
+| R | fixed nprobe | ratio + cap (cap, ε) | stopping rule θ | saving ratio+cap | saving stopping rule [95% CI] | curve-based | captured (Lagr.) [95% CI] |
+|---|---|---|---|---|---|---|---|
+| 0.80 | 13 | 16, 0.227 | 0.147 | 1.11× | **1.17×** [1.16, 1.18] | 1.15× | 32% [29, 34] |
+| 0.90 | 26 | 32, 0.286 | 0.123 | 1.13× | **1.25×** [1.23, 1.27] | 1.21× | 35% [32, 37] |
+| 0.95 | 45 | 48, 0.396 | 0.098 | 1.16× | **1.31×** [1.29, 1.34] | 1.27× | 37% [35, 40] |
+| 0.99 | 122 | 128, 0.547 | 0.037 | 1.16× | **1.34×** [1.32, 1.37] | 1.45× | 42% [37, 44] |
+
+Test recall of every tuned choice is within 0.004 of R. The round/PQ version loses nothing
+against the per-cell exact version of 10 (1.22× at 0.9 there): the information is in "has the
+top-10 settled", and the PQ top-10 carries it as well as the exact one.
+(Ratio + cap here is slightly better than in Kiryl's E4 entry, 1.13× vs 1.07× at 0.9: different
+ε grid and the cap chosen by least tune work rather than a fixed list.)
+
+**E5 timing (single thread, ms per query, batch of 5000; recall and work as above)**
+
+| R | method | quantizer | rule | scan | re-rank | total | speed-up vs plain |
+|---|---|---|---|---|---|---|---|
+| 0.9 | fixed, plain `index.search` | 0.26 (incl. scan) | – | – | 0.21 | 0.46 | 1.00 |
+| 0.9 | fixed, preassigned path | 0.017 | – | 0.27 | 0.13 | 0.42 | 1.10 |
+| 0.9 | **same 26 cells scanned in the rule's 26 rounds** | 0.017 | – | 1.21 (incl. merge) | 0.13 | 1.36 | 0.34 |
+| 0.9 | ratio rule, cap 32 | 0.019 | 0.0001 | 0.25 | 0.13 | 0.40 | 1.17 |
+| 0.9 | stopping rule (rounds) | 0.086 | 0.19 | 0.92 | 0.13 | 1.32 | 0.35 |
+
+Same pattern at every target: ratio + cap 1.04–1.17× faster than plain Faiss (work saving
+1.11–1.16×), the stopping rule 0.33–0.41× (i.e. ~3× slower). Batch-size-1 latency at R = 0.9:
+plain p50 0.67 ms / p99 2.3 ms, stopping rule p50 4.5 ms / p99 11 ms.
+
+**Reading of E5**
+- The stopping rule's time is not its logic (features + model: 0.19 ms, could be ~0 in C++) but
+  **the per-call overhead of `search_preassigned`**: the control row shows that scanning the
+  very same 26 cells in 26 calls instead of 1 costs 1.21 ms instead of 0.27 ms (4.4×). Each call
+  re-initialises per-query heaps, output arrays and Python/SWIG round trips; Faiss has no API to
+  resume a scan. The rule does scan 20% fewer vectors (0.92 vs 1.21 ms inside the same round
+  structure), as the work numbers say.
+- So, in this prototype: the ratio + cap rule turns its 1.13× work saving into a 1.17× speed-up
+  (one extra masking step, one scan call); the stopping rule's 1.25× work saving cannot be
+  realised without an incremental scan inside Faiss (C++: keep the per-query scanner and heap
+  alive across rounds). The proposal's prediction "time saving smaller than work saving" holds
+  for the first and is an understatement for the second.
+- Quantizer cost: the stopping rule asks for the 256 nearest centroids up front (0.086 ms vs
+  0.017 for 26). A lazy extension (ask for 32, extend only for queries that continue) would
+  remove most of it.
+- The plain `index.search` row at R = 0.99 (0.98 ms vs 0.40 ms through the preassigned path with
+  identical ndis) is anomalous; not investigated, not used in any conclusion.
+
+**Next**
+- Both: this settles the report's structure. Suggested: ratio + cap as "the simple rule that works
+  a little, in work and in time"; the stopping rule as "what the scan feedback is worth" with the
+  honest statement that its time gain needs an in-library implementation; ratio as the negative
+  result; oracle as the ceiling.
+- Plots: add stopping-rule and ratio+cap curves to plot 1 (data in `11_curves_test.csv`), a
+  time-vs-recall plot from `12_timing.csv`, the tail-recall figure from `09_tail_recall.csv`.
+- Optional: a coarser schedule (e.g. 8 decision points) to show the work/time trade-off of the
+  stopping rule; nlist = 1024.
 
 ---
 

@@ -174,15 +174,21 @@ def sequential_features(index, xb, xq, Iq, Dq, k: int, k_rerank: int, chunk: int
     """Scan each query's cells one at a time in quantizer order and record, after cell c:
     r1, r10: exact distance of the current best and k-th candidate (plain L2),
     n_changed: how many of the exact top-k ids changed at this step,
-    n_entered: how many of this cell's PQ candidates entered the running top-k_rerank.
+    n_entered: how many of this cell's PQ candidates entered the running top-k_rerank,
+    r1_pq, r10_pq, n_changed_pq: the same as r1, r10, n_changed but on PQ distances, i.e. the
+    best and k-th PQ candidate and the changes of the PQ top-k. The PQ versions cost a real
+    search nothing; the exact ones need re-ranking after every cell.
     Shapes (n, C). Everything here is available to a real search at that moment."""
     n, C = Iq.shape
     r1 = np.full((n, C), np.inf, np.float32); r10 = np.full((n, C), np.inf, np.float32)
     n_changed = np.zeros((n, C), np.int16); n_entered = np.zeros((n, C), np.int16)
+    r1_pq = np.full((n, C), np.inf, np.float32); r10_pq = np.full((n, C), np.inf, np.float32)
+    n_changed_pq = np.zeros((n, C), np.int16)
     for s in range(0, n, chunk):
         e = min(n, s + chunk); m = e - s; xs = xq[s:e]
         cum_pq = np.full((m, k_rerank), np.inf, np.float32); cum_ex = np.full((m, k_rerank), np.inf, np.float32)
         cum_id = np.full((m, k_rerank), -1, np.int64); prev = np.full((m, k), -2, np.int64)
+        prev_pq = np.full((m, k), -2, np.int64)
         for c in range(C):
             D_c, I_c = preassigned_search(index, xs, k_rerank, Iq[s:e, c:c + 1], Dq[s:e, c:c + 1])
             E_c = _exact_sq_dist(xb, xs, I_c)
@@ -198,6 +204,11 @@ def sequential_features(index, xb, xq, Iq, Dq, k: int, k_rerank: int, chunk: int
             r1[s:e, c] = np.sqrt(ex[:, 0]); r10[s:e, c] = np.sqrt(ex[:, -1])
             n_changed[s:e, c] = k - (ids[:, :, None] == prev[:, None, :]).any(2).sum(1)
             prev = ids
+            ids_pq = cum_id[:, :k]
+            r1_pq[s:e, c] = np.sqrt(np.maximum(cum_pq[:, 0], 0)); r10_pq[s:e, c] = np.sqrt(np.maximum(cum_pq[:, k - 1], 0))
+            n_changed_pq[s:e, c] = k - (ids_pq[:, :, None] == prev_pq[:, None, :]).any(2).sum(1)
+            prev_pq = ids_pq
         if verbose:
             print(f"sequential features: {e}/{n}")
-    return {"r1": r1, "r10": r10, "n_changed": n_changed, "n_entered": n_entered}
+    return {"r1": r1, "r10": r10, "n_changed": n_changed, "n_entered": n_entered,
+            "r1_pq": r1_pq, "r10_pq": r10_pq, "n_changed_pq": n_changed_pq}

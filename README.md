@@ -25,7 +25,9 @@ uv run python experiments/06_rule_within_nprobe_timing.py  # its wall-clock chec
 uv run python experiments/07_rules_explore.py   # alternative rules (bounds, two-stage, patience) on tune (~7 min)
 uv run python experiments/08_fitted_rule.py     # extension 6: rule fitted to the oracle, tune -> test
 uv run python experiments/09_tail_recall.py     # per-query recall distribution at equal work
-uv run python experiments/10_stop_rule.py       # scan-feedback stopping rule, tune -> test (~3 min first run)
+uv run python experiments/10_stop_rule.py       # scan-feedback stopping rule, per-cell exact features, tune -> test (~3 min first run)
+uv run python experiments/11_stop_rule_rounds.py  # implementable round-based stopping rule (stoprule.py): tune -> test, bootstrap CIs (~2 min)
+uv run python experiments/12_timing.py          # E5: single-thread timing at matched recall, components, batch-1 latency (~10 min)
 ```
 
 ## Layout
