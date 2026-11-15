@@ -112,20 +112,27 @@ how many of the round's candidates entered the top-200. We scan in rounds (1, 2,
 logistic model gives P(continue). The model is fitted on tune with labels from the oracle ("the
 oracle would continue past this point"); the threshold θ is chosen on tune with 2-fold
 cross-fitted predictions. No exact distances are used before the final re-ranking. The result is
-a prefix of the quantizer order, so its recall is exactly what the real search gives (checked).
+a prefix of the quantizer order, so its recall can be read off the oracle curves; run live through
+the real rounds it is lower by at most 0.0007 (7–35 of 5 000 SIFT1M test queries differ, 1 on
+Deep1M, from PQ-distance ties at the 200th candidate when lists are merged across rounds).
 
 On test it saves **1.17 / 1.25 / 1.31 / 1.34×** work at the four targets (CIs ±0.02), i.e. 32–42%
 of the oracle's saving, and reduces the share of badly served queries at equal work from 12.2% to
 5.3% (budget of nprobe 13) and from 2.5% to 0.3% (budget of nprobe 26) (Figure 7). An earlier
-variant that re-ranked after every cell and used exact distances did no better (1.22× at R = 0.9):
-the information is in "has the top-10 settled", and the PQ top-10 carries it. The gain over the
-static fitted rule is small at R ≤ 0.95 (1.25× vs 1.19×) and clear at R = 0.99 (1.34× vs 1.33× for
-the tuned point; 1.45× vs 1.33× curve-based): at high recall the question "is anything still
-changing?" carries information that no static feature has.
+variant that re-ranked after every cell and used exact distances did no better (1.22× at R = 0.9),
+and a feature ablation shows what matters: the distance of the current 10th PQ candidate relative
+to the next centroid, plus the number of cells scanned. The "patience" features (has the top-10
+changed recently, how many candidates entered the list) add nothing once those are present. The
+gain over the static fitted rule is small at R ≤ 0.95 (1.25× vs 1.19×) and larger at R = 0.99
+(1.45× vs 1.33× curve-based): at high recall, how far the current 10th candidate still is carries
+information that no static feature has.
 
-**The rule in closed form.** Three of the 26 features carry all of the effect: refitting the
-model with only d_next/d_1, r10/d_1 and c gives the same savings within ±0.02 at every target on
-both datasets (1.20× vs 1.21× at R = 0.9 on SIFT1M, 1.25× vs 1.27× on Deep1M). Its decision boundary
+**The rule in closed form.** Three of the 26 features carry almost all of the effect: refitting the
+model with only d_next/d_1, r10/d_1 and c gives the same savings within ±0.02 at R ≤ 0.95 on both
+datasets (1.20× vs 1.21× at R = 0.9 on SIFT1M, 1.25× vs 1.27× on Deep1M); at R = 0.99 the 17 static
+features add 4–6% in the tuned measure (1.29× vs 1.34× on SIFT1M, 1.55× vs 1.65× on Deep1M), the one
+place where they matter. Run live through the real search, the formula below picks exactly the
+same cells as the 3-feature model for every test query on both datasets. Its decision boundary
 is a formula. After scanning c cells, continue to the next cell iff
 
     d_next / d_1  <  K · (r10 / d_1)^p · c^q,        SIFT1M, R = 0.9:  K = 1.53, p = 0.64, q = −0.085,

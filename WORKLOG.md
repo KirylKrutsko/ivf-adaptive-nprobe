@@ -28,6 +28,24 @@ Status board (updated with every entry):
 
 ---
 
+## 2026-11-16 — Kiryl's live check rerun on Deep1M; report edits applied
+
+`15_stoprule_verify.py configs/deep1m.yaml` (42 s). Same picture as on SIFT1M:
+- formula == 3-feature model for every test query at all four targets;
+- tuned saving, compact vs all 26: 1.24 / 1.26 / 1.36 / **1.55** vs 1.24 / 1.26 / 1.36 / **1.65**
+  (CIs ±0.02 at R ≤ 0.95, [1.51, 1.59] vs [1.61, 1.69] at 0.99): static features add ~6% at 0.99
+  on Deep1M (4% on SIFT1M), nothing below;
+- patience / top-10-change features add nothing (dynamic-6 == compact-3 within CI);
+- live vs curve-read recall: 1 of 5 000 test queries differs (SIFT1M: 7–35).
+Compact formula on Deep1M per target: K ≈ 1.37–1.38, p 0.52 → 0.66, q −0.104 → −0.019.
+
+Report (`report/results.md` §5) updated as Kiryl asked: the "top-10 settled" sentence replaced by
+the ablation result (r10 vs the next centroid + cells scanned is the signal), the live-vs-curves
+caveat added, and the compact rule's 0.99 numbers quoted in the tuned measure with the 4–6% the
+static features add.
+
+---
+
 ## 2026-11-16 — compact stopping rule: live check, tuned savings with CIs (Kiryl)
 
 Complements Matvei's `14_compact_rule.py` entry below (same finding, same coefficients). That
