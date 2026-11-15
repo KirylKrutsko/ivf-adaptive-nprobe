@@ -36,6 +36,7 @@ uv run python experiments/12_timing.py          # E5: single-thread timing at ma
 #   uv run python experiments/<script>.py configs/deep1m.yaml            -> results/deep1m/      (Deep1M, 96-d; downloads 388 MB)
 uv run python experiments/13_transfer.py        # stopping rule across datasets: weights, transfer without refit, one joint model
 uv run python experiments/14_compact_rule.py    # 3-feature stopping rule and its closed form: d_next/d1 < K (r10/d1)^p c^q
+uv run python experiments/15_stoprule_verify.py   # live check of the compact rule + feature ablation, tuned savings with CIs
 ```
 
 ## Layout

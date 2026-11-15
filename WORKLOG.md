@@ -23,7 +23,64 @@ Status board (updated with every entry):
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
+| Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 — compact stopping rule: live check, tuned savings with CIs (Kiryl)
+
+Complements Matvei's `14_compact_rule.py` entry below (same finding, same coefficients). That
+entry evaluates curve-based savings with one model fitted at R = 0.9; this one checks the compact
+rule the way 11 reports the full model, and runs it for real.
+
+**Done.** `experiments/15_stoprule_verify.py` (SIFT1M only so far, 46 s):
+- feature-group ablation with the exact protocol of 11 (one model per target, labels from the
+  Lagrangian oracle on tune, θ by 2-fold cross-fit on tune), tuned saving vs the fixed nprobe
+  chosen on tune, bootstrap 95% CIs (1000 resamples of test queries);
+- the 3-feature model and its closed form `d_next/d_1 < K (r10/d_1)^p c^q` run **live** through
+  `stoprule.run_rounds` on all 5000 test queries, re-ranked exactly, recall measured against the
+  ground truth instead of read off the E2 curves.
+
+**Results (SIFT1M test; tuned saving [95% CI])**
+
+| features | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| all 26 (model of 11) | 1.169 [1.155, 1.182] | 1.247 [1.229, 1.265] | 1.314 [1.294, 1.336] | **1.340** [1.315, 1.366] |
+| dynamic 9 | 1.165 | 1.253 | 1.276 | 1.285 |
+| dynamic without patience / top-10 changes (6) | 1.169 | 1.246 | 1.322 | 1.294 |
+| **compact 3** | 1.169 [1.157, 1.181] | 1.247 [1.230, 1.265] | 1.322 [1.301, 1.344] | **1.292** [1.267, 1.317] |
+| static 17 (cannot stop: no feature changes during the scan) | 0.09 | 0.14 | 0.21 | 0.50 |
+
+Formula coefficients (K, p, q) per target: 0.8: 1.558, 0.53, −0.130; 0.9: 1.527, 0.64, −0.085;
+0.95: 1.546, 0.69, −0.069; 0.99: 1.551, 0.73, −0.039 (same as 14 at R = 0.9).
+
+**Findings**
+1. **The formula is exactly the model.** Run as a plain inequality it picks the same cells as the
+   3-feature logistic model for every test query at all four targets (asserted in the script).
+2. **Up to R = 0.95 the compact rule equals the full model** in the tuned measure too (identical
+   numbers or within the CI).
+3. **At R = 0.99 it does not: 1.29× vs 1.34×**, CIs just touching (1.317 vs 1.315). The gap is the
+   static features: the 9 dynamic features alone also give 1.29×. The curve-based measure of 14
+   (1.51 vs 1.49) does not show it because the compact rule overshoots the target slightly
+   (recall 0.9921 vs 0.9916), which the tuned measure charges for and the curve measure does not.
+   So "within ±0.02 everywhere" holds for the curve measure, not for the tuned one at 0.99.
+4. **Patience / "has the top-10 settled" adds nothing.** Removing those features changes nothing;
+   the signal is r10 relative to the next centroid plus the number of cells scanned. The report's
+   sentence in §5 ("the information is in 'has the top-10 settled'") should be reworded.
+5. **Live recall is slightly below the curve-read recall** for the round-based rule: 7 / 19 / 22 / 35
+   of 5000 test queries differ, mean recall lower by 0.0002–0.0007 (e.g. 0.9019 live vs 0.9022 at
+   R = 0.9). This applies to the numbers of 11 and 14 as well, which read recall off the curves.
+   The single-call ratio rule had 0 mismatches (04), so it comes from merging candidates across
+   rounds; likely cause: PQ-distance ties at the 200th candidate (SIFT1M has duplicate vectors),
+   not verified. Too small to change any conclusion, but the report should not say the round
+   rule's recall equals the curves exactly.
+
+**Next (Matvei, since the report is yours)**
+- §5 / the compact-rule paragraph: quote 1.29× at R = 0.99 for the compact rule in the tuned
+  measure, or say the static features add ~4% there; reword the "top-10 settled" sentence; soften
+  "equals the real search" for the round rule.
+- Optional: run `15_stoprule_verify.py configs/deep1m.yaml` to check the same on Deep1M.
 
 ---
 
