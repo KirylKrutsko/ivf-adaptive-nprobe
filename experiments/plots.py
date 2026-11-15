@@ -50,7 +50,7 @@ def plot_recall_vs_work(curves: pd.DataFrame, head: pd.DataFrame, path: Path) ->
     ax.set_xscale("log")
     ax.set_xlabel("work per query: scanned vectors + 200 re-ranked (log scale)")
     ax.set_ylabel("recall@10 (after re-ranking)")
-    ax.set_title(f"Recall vs work, SIFT1M test queries (nlist {NLIST})", loc="left", color=INK)
+    ax.set_title(f"Recall vs work, {DATASET} test queries (nlist {NLIST})", loc="left", color=INK)
     ax.legend(loc="lower right")
     fig.tight_layout(); fig.savefig(path, dpi=160); plt.close(fig)
 
@@ -140,6 +140,7 @@ STYLES = {"fixed": ("fixed nprobe", FIXED, "-"), "ratio": ("ratio rule (proposal
 
 
 NLIST = 4096
+DATASET = "SIFT1M"
 
 
 def plot_recall_vs_work_all(mc: pd.DataFrame, stop_head: pd.DataFrame, path: Path) -> None:
@@ -156,7 +157,7 @@ def plot_recall_vs_work_all(mc: pd.DataFrame, stop_head: pd.DataFrame, path: Pat
     ax.set_xscale("log"); ax.set_ylim(0.6, 1.0)
     ax.set_xlabel("work per query: scanned vectors + 200 re-ranked (log scale)")
     ax.set_ylabel("recall@10 (after re-ranking)")
-    ax.set_title(f"Recall vs work, SIFT1M test queries (nlist {NLIST})", loc="left", color=INK)
+    ax.set_title(f"Recall vs work, {DATASET} test queries (nlist {NLIST})", loc="left", color=INK)
     ax.legend(loc="lower right", fontsize=9)
     fig.tight_layout(); fig.savefig(path, dpi=160); plt.close(fig)
 
@@ -235,7 +236,7 @@ def plot_tail(tail: pd.DataFrame, path: Path) -> None:
 
 def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     cfg = load_config(cfg_path)
-    global NLIST; NLIST = cfg["index"]["nlist"]
+    global NLIST, DATASET; NLIST = cfg["index"]["nlist"]; DATASET = {"sift1m": "SIFT1M", "deep1m": "Deep1M"}.get(cfg["dataset"], cfg["dataset"])
     res = Path(cfg["results_dir"]); out = res / "plots"; out.mkdir(exist_ok=True)
     curves, head = pd.read_csv(res / "05_curves_test.csv"), pd.read_csv(res / "05_tune_test.csv")
     head11 = pd.read_csv(res / "11_stop_rule_rounds.csv")
