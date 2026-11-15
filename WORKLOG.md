@@ -27,6 +27,49 @@ Status board (updated with every entry):
 
 ---
 
+## 2026-11-16 — compact stopping rule: three features are enough (Kiryl's observation, confirmed)
+
+`experiments/14_compact_rule.py`: the stopping rule refitted with only log d_next/d_1, log r10/d_1
+and log c, same protocol as 11 (labels from the Lagrangian oracle on tune, θ by cross-fit on tune,
+reported on test), both datasets, all four targets. Results in `results/14_compact_rule.csv`.
+
+| dataset | model (fit R = 0.9) | saving @0.8 / 0.9 / 0.95 / 0.99 |
+|---|---|---|
+| SIFT1M | 26 features | 1.15 / 1.21 / 1.26 / 1.49 |
+| SIFT1M | **3 features** | 1.14 / 1.20 / 1.28 / 1.51 |
+| Deep1M | 26 features | 1.15 / 1.27 / 1.44 / 1.81 |
+| Deep1M | **3 features** | 1.14 / 1.25 / 1.43 / 1.78 |
+
+Within ±0.02 everywhere; same for the models fitted at the other targets. The 23 other features
+add nothing measurable. The decision boundary of the 3-feature model is a closed-form rule.
+Continue past c cells iff
+
+    d_next / d_1  <  K · (r10 / d_1)^p · c^q        SIFT1M, R = 0.9:  K = 1.53, p = 0.64, q = −0.085
+                                                      Deep1M, R = 0.9:  K = 1.38, p = 0.58, q = −0.067
+
+where d_next is the distance to the next cell's centroid, d_1 to the nearest, r10 the PQ distance
+of the current 10th candidate, c the cells scanned so far. (Kiryl's Claude derived the SIFT
+formula independently; the coefficients agree exactly.) Fitting at other targets changes p and q
+a little (p 0.53 → 0.73 from R = 0.8 to 0.99 on SIFT) and K not at all.
+
+**Reading.** This is the proposal's ratio rule with an adaptive ε: scan the next cell while
+d_next ≤ (1 + ε_eff) d_1, with 1 + ε_eff = K (r10/d_1)^p c^q instead of a constant. The data say
+ε must grow with how far the current 10th candidate still is relative to the nearest centroid
+(far → keep scanning) and shrink slowly with the number of cells already scanned. A constant ε
+cannot do this, which is the failure of §3 in one line. The whole model has 4 numbers (K, p, q, θ
+folded into K), no learning library, and the same cost as the ratio rule plus one PQ-distance
+lookup per round.
+
+Transfer without refit (compact, R = 0.9): SIFT rule on Deep reaches recall 0.934 (full model:
+0.68), Deep rule on SIFT 0.853 (full model: 0.96); savings within 0.02 of native. The compact
+rule's threshold transfers much better than the 26-feature one, still not exactly; K differs
+(1.53 vs 1.38) between datasets.
+
+**For the report**: present this formula as the method. It is the proposal's rule, repaired by the
+data; the 26-feature model becomes a footnote showing nothing more is to be gained from the rest.
+
+---
+
 ## 2026-11-16 — is the stopping rule universal across datasets? (Kiryl's question)
 
 `experiments/13_transfer.py`, R = 0.9 models from 11 (results in `results/13_transfer*.csv`).

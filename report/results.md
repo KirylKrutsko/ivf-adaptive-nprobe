@@ -123,6 +123,22 @@ static fitted rule is small at R ≤ 0.95 (1.25× vs 1.19×) and clear at R = 0.
 the tuned point; 1.45× vs 1.33× curve-based): at high recall the question "is anything still
 changing?" carries information that no static feature has.
 
+**The rule in closed form.** Three of the 26 features carry all of the effect: refitting the
+model with only d_next/d_1, r10/d_1 and c gives the same savings within ±0.02 at every target on
+both datasets (1.20× vs 1.21× at R = 0.9 on SIFT1M, 1.25× vs 1.27× on Deep1M). Its decision boundary
+is a formula. After scanning c cells, continue to the next cell iff
+
+    d_next / d_1  <  K · (r10 / d_1)^p · c^q,        SIFT1M, R = 0.9:  K = 1.53, p = 0.64, q = −0.085,
+
+where d_1 and d_next are the distances to the nearest centroid and to the next cell's centroid, and
+r10 is the PQ distance of the current 10th candidate. This is the proposal's rule with an adaptive
+ε: scan while d_next ≤ (1 + ε) d_1, but with 1 + ε = K (r10/d_1)^p c^q instead of a constant. The
+data say ε has to grow with how far the current 10th candidate still is from the query relative to
+the nearest centroid, and shrink slowly with the number of cells already scanned; a constant ε
+cannot do either, which is why the rule of §3 fails. On Deep1M the fitted constants are K = 1.38,
+p = 0.58, q = −0.067; the SIFT1M formula applied to Deep1M unchanged reaches recall 0.93 at the same
+work saving.
+
 ## 6. Why the other two thirds are out of reach
 
 The oracle's remaining advantage comes from two things the search cannot observe. First, it knows
