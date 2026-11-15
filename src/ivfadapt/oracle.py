@@ -166,3 +166,38 @@ def at_cells(curves: Curves, n: np.ndarray) -> dict[str, np.ndarray]:
             "recall_raw": np.take_along_axis(curves.recall_raw, j, axis=1)[:, 0],
             "coverage": np.take_along_axis(curves.coverage, j, axis=1)[:, 0],
             "work": np.take_along_axis(curves.work, j, axis=1)[:, 0]}
+
+
+# ---- what the search itself knows after each cell (features for stopping rules) ----------
+
+def sequential_features(index, xb, xq, Iq, Dq, k: int, k_rerank: int, chunk: int = 500, verbose: bool = True) -> dict[str, np.ndarray]:
+    """Scan each query's cells one at a time in quantizer order and record, after cell c:
+    r1, r10: exact distance of the current best and k-th candidate (plain L2),
+    n_changed: how many of the exact top-k ids changed at this step,
+    n_entered: how many of this cell's PQ candidates entered the running top-k_rerank.
+    Shapes (n, C). Everything here is available to a real search at that moment."""
+    n, C = Iq.shape
+    r1 = np.full((n, C), np.inf, np.float32); r10 = np.full((n, C), np.inf, np.float32)
+    n_changed = np.zeros((n, C), np.int16); n_entered = np.zeros((n, C), np.int16)
+    for s in range(0, n, chunk):
+        e = min(n, s + chunk); m = e - s; xs = xq[s:e]
+        cum_pq = np.full((m, k_rerank), np.inf, np.float32); cum_ex = np.full((m, k_rerank), np.inf, np.float32)
+        cum_id = np.full((m, k_rerank), -1, np.int64); prev = np.full((m, k), -2, np.int64)
+        for c in range(C):
+            D_c, I_c = preassigned_search(index, xs, k_rerank, Iq[s:e, c:c + 1], Dq[s:e, c:c + 1])
+            E_c = _exact_sq_dist(xb, xs, I_c)
+            pq = np.concatenate([cum_pq, D_c], 1)
+            order = np.argsort(pq, 1, kind="stable")[:, :k_rerank]
+            n_entered[s:e, c] = (order >= k_rerank).sum(1)
+            cum_pq = np.take_along_axis(pq, order, 1)
+            cum_ex = np.take_along_axis(np.concatenate([cum_ex, E_c], 1), order, 1)
+            cum_id = np.take_along_axis(np.concatenate([cum_id, I_c], 1), order, 1)
+            top = np.argsort(cum_ex, 1, kind="stable")[:, :k]
+            ids = np.take_along_axis(cum_id, top, 1)
+            ex = np.take_along_axis(cum_ex, top, 1)
+            r1[s:e, c] = np.sqrt(ex[:, 0]); r10[s:e, c] = np.sqrt(ex[:, -1])
+            n_changed[s:e, c] = k - (ids[:, :, None] == prev[:, None, :]).any(2).sum(1)
+            prev = ids
+        if verbose:
+            print(f"sequential features: {e}/{n}")
+    return {"r1": r1, "r10": r10, "n_changed": n_changed, "n_entered": n_entered}

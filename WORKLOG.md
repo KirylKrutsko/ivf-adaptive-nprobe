@@ -21,7 +21,76 @@ Status board (updated with every entry):
 | Plots | plots 1–5 done (`results/plots/`) |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
+| Tail recall at equal work | done (`results/09_*`) |
+| Scan-feedback stopping rule (fitted) | done, tune→test (`results/10_*`), **best so far: 1.22× at R = 0.9** |
 | Extensions | not started |
+
+---
+
+## 2026-11-16 — scan-feedback stopping rule (best so far) and tail recall at equal work
+
+**Done**
+- `oracle.sequential_features`: one pass over all 10k queries (175 s, cached in
+  `results/10_sequential_features.npz`) recording after every cell what a real search knows at
+  that moment: exact distance of the current best and 10th candidate (r1, r10), how many top-10
+  ids changed, how many of the cell's PQ candidates entered the running top-200.
+  r10 is not strictly monotone (0.008% of steps, 1.9% of queries, ≤ 1.8%): the running top-200 is
+  cut by PQ distance, so a good exact candidate can be evicted later. Real behaviour, kept.
+- `experiments/10_stop_rule.py`: logistic model P(continue after c cells) on 26 features
+  (log r10/d_1, log r10/d_{c+1}, log r1/d_1, log d_{c+1}/d_1, log c, steps since the last top-10
+  change, changes and entries in the last 4 cells, r10 improvement over 4 cells, + the 17 static
+  features of 08). Labels: the Lagrangian oracle on **tune** continues past c (fit for R = 0.8,
+  0.9, 0.95). On **test** the scan stops at the first c with P < θ; θ swept. Prefix rule, so read
+  off the E2 curves. Newton fit in 3 s on 1.28M rows.
+- `experiments/09_tail_recall.py`: per-query recall distribution at equal mean work on test.
+
+**Results, tune → test, work saving vs fixed nprobe at matched mean recall**
+
+| rule | @0.8 | @0.9 | @0.95 | @0.99 |
+|---|---|---|---|---|
+| stopping rule, labels from oracle at R = 0.9 | 1.15 | **1.22** | 1.25 | 1.49 |
+| stopping rule, labels at R = 0.95 | 1.13 | 1.22 | **1.28** | **1.55** |
+| static fitted rule (08), for reference | 1.13 | 1.19 | 1.23 | 1.33 |
+| ratio + cap (E4), for reference | 1.05 | 1.07 | 1.12 | 1.18 |
+| oracle ceiling | 1.71 | 1.98 | 2.35 | 3.94 |
+
+Captured share of the oracle saving at R = 0.9: 37% (was 32% static, 13% ratio+cap).
+Scan feedback adds a little over the static features at 0.8–0.95 and clearly more at 0.99
+(1.55× vs 1.33×): at high recall the question "has the top-10 stopped moving?" carries
+information that centroid distances do not.
+
+**Tail recall at equal mean work (test; budget = work of fixed nprobe 13 / 26):**
+
+| method | recall mean | share recall ≤ 0.5 | p10 recall |
+|---|---|---|---|
+| fixed 13 | 0.809 | 12.2% | 0.5 |
+| ratio rule | 0.757 | 16.1% | 0.5 |
+| ratio + cap 32 | 0.783 | 12.4% | 0.5 |
+| fitted (08) | 0.832 | **6.4%** | 0.6 |
+| oracle | 0.914 | 1.3% | 0.8 |
+| fixed 26 | 0.907 | 2.5% | 0.7 |
+| ratio rule | 0.861 | 5.6% | 0.6 |
+| fitted (08) | 0.927 | **0.8%** | 0.8 |
+
+The proposal's ratio rule is worse than fixed nprobe on the tail as well (it gives the extra cells
+to the wrong queries), so "fairer" is not a rescue for it. The fitted rule halves the share of
+badly served queries at the same budget: that is a second, positive way to present it.
+
+**Where this leaves the project.** Three honest statements for the report:
+1. The proposed ratio rule does not save work (0.73–0.93×) and does not help the tail.
+2. Any calibrated rule on centroid distances saves 1.1–1.2×; adding scan feedback 1.15–1.55×
+   (the only method here that is a real improvement at every target, with 37% of the oracle
+   saving at R = 0.9). Both are tune→test, no model beyond a linear/logistic fit.
+3. The oracle shows 2–4× is possible per query, but the difficulty of a query is mostly not
+   observable from what IVF knows at search time on SIFT1M at nlist = 4096.
+
+**Next**
+- Both: pick the report's "method" (suggest: stopping rule as main, ratio + cap as the simple
+  variant, ratio as the negative result). Then E5 timing for that method: the stopping rule needs
+  per-cell sequential scanning, whose overhead in Python is not representative; time it in a
+  batched form (scan cells in rounds, re-evaluate P every round).
+- Bootstrap CIs for the stopping rule (same machinery as E4).
+- nlist = 1024 / second dataset if time remains.
 
 ---
 
