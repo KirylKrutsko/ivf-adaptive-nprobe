@@ -2,9 +2,11 @@
 
 Kiryl Krutsko, Matvei Sendetskii.
 
-Instead of scanning a fixed `nprobe` cells per query, scan every cell whose centroid is at most
-`(1 + ε)` times as far as the nearest one. We compare this rule with fixed `nprobe` and with an
-oracle on SIFT1M, measuring recall@10 against the number of scanned vectors.
+Instead of scanning a fixed `nprobe` cells per query, choose the number of cells per query. We
+compare the proposal's rule (scan every cell whose centroid is at most `(1 + ε)` times as far as
+the nearest one), calibrated variants of it, and a stopping rule on scan feedback with fixed
+`nprobe` and with an oracle on SIFT1M and Deep1M, measuring recall@10 against scanned vectors.
+Findings so far: `report/results.md`. History and reasoning: `WORKLOG.md`.
 
 See `proposal.pdf` for the proposal, `PLAN.md` for the implementation and experiment plan,
 and `WORKLOG.md` for progress notes and the reasoning behind decisions.
@@ -29,8 +31,9 @@ uv run python experiments/10_stop_rule.py       # scan-feedback stopping rule, p
 uv run python experiments/11_stop_rule_rounds.py  # implementable round-based stopping rule (stoprule.py): tune -> test, bootstrap CIs (~2 min)
 uv run python experiments/12_timing.py          # E5: single-thread timing at matched recall, components, batch-1 latency (~10 min)
 
-# every script takes a config path; extension 3 (nlist = 1024) is the same pipeline with
-#   uv run python experiments/<script>.py configs/sift1m_nlist1024.yaml   -> results/nlist1024/
+# every script takes a config path; the extensions are the same pipeline with another config:
+#   uv run python experiments/<script>.py configs/sift1m_nlist1024.yaml   -> results/nlist1024/   (nlist = 1024)
+#   uv run python experiments/<script>.py configs/deep1m.yaml            -> results/deep1m/      (Deep1M, 96-d; downloads 388 MB)
 ```
 
 ## Layout

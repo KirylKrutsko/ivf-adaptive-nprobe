@@ -9,7 +9,7 @@ import faiss
 import numpy as np
 
 from ivfadapt.config import load_config
-from ivfadapt.data import load_sift1m
+from ivfadapt.data import load_dataset
 from ivfadapt.index import load_index
 
 
@@ -42,7 +42,7 @@ def load_env(cfg_path: str | Path = "configs/sift1m.yaml") -> Env:
     """Requires experiments/01_build.py to have run (index and ground truth cached)."""
     cfg = load_config(cfg_path)
     data_dir = Path(cfg["data_dir"])
-    data = load_sift1m(data_dir)
+    data = load_dataset(cfg)
     gt = np.load(data_dir / "groundtruth_k100.npy")
     split = np.load(data_dir / f"query_split_seed{cfg['seed']}.npz")
     index, cell_of, list_sizes = load_index(cfg)

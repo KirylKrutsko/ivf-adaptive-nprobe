@@ -31,7 +31,7 @@ from ivfadapt.stoprule import SCHEDULE, cells_from_P, fit_logistic, labels_conti
 
 N_BOOT = 1000
 THETAS = np.concatenate([np.geomspace(1e-6, 0.02, 40), np.linspace(0.025, 0.99, 80)])
-CAPS = [16, 32, 48, 128]
+CAPS = [16, 32, 48, 128, 256]        # 256 = max_cells, i.e. the uncapped rule
 EPS_GRID = np.unique(np.concatenate([[0.0], np.geomspace(1e-3, 1.0, 150)]))
 
 
@@ -102,6 +102,8 @@ def main(cfg_path: str = "configs/sift1m.yaml") -> None:
             e = smallest_reaching(rule_tune[cap][0].mean(1), R)
             if e is not None and (best is None or rule_tune[cap][1][e].mean() < best[2]):
                 best = (cap, e, rule_tune[cap][1][e].mean())
+        if best is None:                     # no (cap, eps) reaches R on tune: report the uncapped rule at its largest eps
+            best = (C, len(EPS_GRID) - 1, np.nan)
         cap, e, _ = best
         n_cap = np.minimum(ratio_n_cells(Dq[env.test], EPS_GRID[e]), cap); ac = at_cells(test, n_cap)
         row = {"target": R, "theta": theta, "nprobe_tuned": int(nprobes[p]), "cap_tuned": cap, "eps_tuned": float(EPS_GRID[e]),

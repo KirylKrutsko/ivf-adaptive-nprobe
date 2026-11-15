@@ -23,7 +23,57 @@ Status board (updated with every entry):
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
-| Extensions | 3 (nlist = 1024) done: `configs/sift1m_nlist1024.yaml`, `results/nlist1024/` |
+| Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 — extension 1: second dataset, Deep1M
+
+**Done.** Deep1M = the first 1M vectors of Yandex DEEP (96-d, unit-norm, L2), fetched from the
+big-ann-benchmarks mirror with an HTTP range request (384 MB) plus the public 10k queries; ground
+truth computed by us (no shipped GT for this prefix). `data.load_dataset` dispatches on
+`cfg["dataset"]`; `configs/deep1m.yaml` keeps everything else identical (`IVF4096,PQ16x8`, 96/16 =
+6 dims per sub-quantizer, full-base training, k_rerank 200, same grids). Same pipeline, 15 min.
+Two robustness fixes on the way: `04_rule.py` now tolerates rare near-tie swaps in the quantizer
+order between the chunked oracle pass and a full-batch call (1.4e-4 of entries on Deep; 0 on
+SIFT), and `11_stop_rule_rounds.py` includes cap = 256 (the uncapped rule) so that a target the
+capped rule cannot reach on tune does not crash it.
+
+Index: 4 096 cells of 244 vectors (43–782), k-means 86 s. Raw PQ16 recall@10 ceiling 0.56,
+re-ranked 0.994 at 256 cells. Fixed nprobe needs 10 / 20 / 37 / 134 cells (SIFT: 13 / 26 / 45 / 122).
+
+**Results, test split, tune → test (SIFT1M nlist 4096 in brackets)**
+
+| | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| work of fixed nprobe | 2 906 (3 793) | 5 510 (7 299) | 9 824 (12 339) | 33 068 (32 247) |
+| oracle ceiling | 1.64× (1.71×) | 2.02× (1.98×) | 2.64× (2.35×) | 5.25× (3.94×) |
+| ratio rule (proposal) | 0.87× (0.77×) | 0.77× (0.73×) | 0.78× (0.77×) | 1.15× (0.93×) |
+| ratio + cap | 1.12× (1.11×) | 1.10× (1.13×) | 1.19× (1.16×) | 1.15× (1.16×) |
+| fitted static rule | 1.12× (1.13×) | 1.22× (1.19×) | 1.30× (1.23×) | 1.35× (1.33×) |
+| **stopping rule** | **1.24× (1.17×)** | **1.26× (1.25×)** | **1.36× (1.31×)** | **1.65× (1.34×)** |
+| captured share (stopping rule) | 33% (32%) | 42% (35%) | 50% (37%) | 53% (42%) |
+
+CIs for the stopping rule: ±0.015 at R ≤ 0.95, [1.61, 1.69] at 0.99. Cells needed (oracle, 0.9):
+median 9 (13), ≤ 3 cells 22% (14%), > 20 cells 25% (33%), never 34 (9). Tail at the nprobe-20
+budget: recall ≤ 0.5 for 4.4% of queries under fixed nprobe, 4.6% ratio, 0.8% stopping rule.
+
+**Reading**
+- Every conclusion from SIFT1M holds on Deep1M, with the same ordering of methods and numbers
+  within a few points, except that the hard tail matters more here: the oracle ceiling at R = 0.99
+  is 5.2× and the stopping rule gets 1.65× of it (half of the possible saving), its best result in
+  the project. Deep has more "never reach it" queries (34 vs 9 at 0.9) and a longer tail, which is
+  exactly where "stop when nothing moves" pays.
+- The ratio rule is the one method whose verdict changes with the target: still 0.77–0.87× at
+  R ≤ 0.95, but 1.15× at R = 0.99 (fixed nprobe needs 134 cells there, and at that point even an
+  over-allocating rule beats a flat 134 for everyone). This is the only configuration in the project
+  where the proposal's rule beats fixed nprobe; it does so at the cap (27% of queries at 256).
+- Static fitted and stopping rules are very close up to 0.95 here too; the scan feedback separates
+  them at 0.99 (1.65× vs 1.35×), as on SIFT.
+
+Figures: `results/deep1m/plots/` (no 6_timing). `report/results.md` §10 added.
+
+**Next**: nothing mandatory left from the plan except timing on the extensions (optional). Write-up.
 
 ---
 

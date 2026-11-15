@@ -1,4 +1,4 @@
-"""E0: download SIFT1M, compute/check ground truth, build and cache the IVF-PQ index.
+"""E0: download the dataset, compute (and for SIFT1M check) the ground truth, build and cache the IVF-PQ index.
 
 Run from the repo root:  uv run python experiments/01_build.py [configs/sift1m.yaml]
 Writes results/01_build.json.
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from ivfadapt.config import load_config
-from ivfadapt.data import compare_ground_truth, compute_ground_truth, load_sift1m, query_split
+from ivfadapt.data import compare_ground_truth, compute_ground_truth, load_dataset, query_split
 from ivfadapt.index import index_paths, load_or_build_index
 
 
@@ -26,7 +26,7 @@ def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     summary: dict = {"config": cfg_path}
 
     t0 = time.perf_counter()
-    data = load_sift1m(data_dir)
+    data = load_dataset(cfg)
     xb, xq = data["base"], data["query"]
     summary["data"] = {k: list(v.shape) for k, v in data.items()}
     summary["load_seconds"] = time.perf_counter() - t0
@@ -35,8 +35,9 @@ def main(cfg_path: str = "configs/sift1m.yaml") -> None:
     t0 = time.perf_counter()
     gt = compute_ground_truth(xb, xq, k=100, cache=data_dir / "groundtruth_k100.npy")
     summary["gt_seconds"] = time.perf_counter() - t0
-    summary["gt_check_top10"] = compare_ground_truth(gt, data["groundtruth"], k=cfg["k"])
-    print("ground truth vs shipped (top-10):", summary["gt_check_top10"])
+    if "groundtruth" in data:
+        summary["gt_check_top10"] = compare_ground_truth(gt, data["groundtruth"], k=cfg["k"])
+        print("ground truth vs shipped (top-10):", summary["gt_check_top10"])
 
     tune, test = query_split(len(xq), cfg["split"]["tune_fraction"], cfg["seed"])
     np.savez(data_dir / f"query_split_seed{cfg['seed']}.npz", tune=tune, test=test)

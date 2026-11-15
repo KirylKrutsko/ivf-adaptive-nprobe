@@ -101,3 +101,52 @@ def query_split(n_queries: int, tune_fraction: float, seed: int) -> tuple[np.nda
     perm = rng.permutation(n_queries)
     n_tune = int(round(tune_fraction * n_queries))
     return np.sort(perm[:n_tune]), np.sort(perm[n_tune:])
+
+
+# ---- Deep1M: first 1M base vectors of Yandex DEEP (96-d, L2), from big-ann-benchmarks -----
+
+DEEP_BASE_URL = "https://storage.yandexcloud.net/yandex-research/ann-datasets/DEEP/base.10M.fbin"
+DEEP_QUERY_URL = "https://storage.yandexcloud.net/yandex-research/ann-datasets/DEEP/query.public.10K.fbin"
+DEEP_N_BASE = 1_000_000
+
+
+def read_fbin(path: str | Path, n_max: int | None = None) -> np.ndarray:
+    """Read a .fbin file (int32 n, int32 d, float32 data), optionally only the first n_max rows."""
+    with open(path, "rb") as f:
+        n, d = np.fromfile(f, dtype=np.int32, count=2)
+        n = int(n) if n_max is None else min(int(n), n_max)
+        return np.fromfile(f, dtype=np.float32, count=n * int(d)).reshape(n, int(d))
+
+
+def download_deep1m(data_dir: str | Path) -> Path:
+    """Fetch the first 1M rows of DEEP base.10M.fbin with an HTTP range request, and the queries."""
+    data_dir = Path(data_dir); data_dir.mkdir(parents=True, exist_ok=True)
+    base, query = data_dir / "base.1M.fbin", data_dir / "query.public.10K.fbin"
+    if not base.exists():
+        n_bytes = 8 + DEEP_N_BASE * 96 * 4
+        req = urllib.request.Request(DEEP_BASE_URL, headers={"Range": f"bytes=0-{n_bytes - 1}"})
+        print(f"downloading first {DEEP_N_BASE} rows of {DEEP_BASE_URL}")
+        with urllib.request.urlopen(req) as r, open(base, "wb") as f:
+            while chunk := r.read(1 << 22):
+                f.write(chunk)
+    if not query.exists():
+        urllib.request.urlretrieve(DEEP_QUERY_URL, query)
+    return data_dir
+
+
+def load_deep1m(data_dir: str | Path) -> dict[str, np.ndarray]:
+    """base (1M x 96), query (10k x 96). No learn set and no shipped ground truth for this prefix."""
+    data_dir = download_deep1m(data_dir)
+    xb = read_fbin(data_dir / "base.1M.fbin", DEEP_N_BASE)
+    assert xb.shape == (DEEP_N_BASE, 96), xb.shape
+    return {"base": xb, "query": read_fbin(data_dir / "query.public.10K.fbin")}
+
+
+def load_dataset(cfg: dict) -> dict[str, np.ndarray]:
+    """Dispatch on cfg['dataset']. Keys: base, query, and for sift1m also learn, groundtruth."""
+    name = cfg["dataset"]
+    if name == "sift1m":
+        return load_sift1m(cfg["data_dir"])
+    if name == "deep1m":
+        return load_deep1m(cfg["data_dir"])
+    raise ValueError(f"unknown dataset {name!r}")

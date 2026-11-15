@@ -195,11 +195,35 @@ size does not change. The ratio rule remains worse than fixed nprobe (0.82–0.9
 version is weaker here and loses at R = 0.99; the stopping rule is the one method whose saving is
 stable across the two indexes (1.22–1.40×, 32–41% of the oracle).
 
+## 10. Extension: a second dataset, Deep1M
+
+The first million vectors of Yandex DEEP (96-d image descriptors, unit norm, L2) with the identical
+index `IVF4096,PQ16x8` and pipeline; ground truth computed by us. Fixed nprobe needs 10 / 20 / 37 /
+134 cells for the four targets (work 2 906 / 5 510 / 9 824 / 33 068).
+
+| | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| queries done in ≤ 3 cells / needing > 20 (oracle, target 0.9) | 22% / 25% (SIFT: 14% / 33%) | | | |
+| oracle ceiling | 1.64× (1.71×) | 2.02× (1.98×) | 2.64× (2.35×) | 5.25× (3.94×) |
+| ratio rule (proposal) | 0.87× (0.77×) | 0.77× (0.73×) | 0.78× (0.77×) | 1.15× (0.93×) |
+| ratio rule + cap | 1.12× (1.11×) | 1.10× (1.13×) | 1.19× (1.16×) | 1.15× (1.16×) |
+| stopping rule | 1.24× (1.17×) | 1.26× (1.25×) | 1.36× (1.31×) | **1.65×** (1.34×) |
+| captured share, stopping rule | 33% | 42% | 50% | 53% |
+
+The picture is the same as on SIFT1M, method by method and within a few points, so the result is
+not specific to SIFT. Deep1M has a longer tail of hard queries (34 queries never reach 0.9 within
+256 cells, against 9), and the tail is where adaptive stopping pays: at R = 0.99 the oracle could
+save 5.2× and the stopping rule saves 1.65×, half of that, its best result in the project. It also
+leaves 0.8% of queries at recall ≤ 0.5 at the budget of nprobe 20, against 4.4% for fixed nprobe.
+The ratio rule of the proposal is below fixed nprobe at R ≤ 0.95 here as well, and beats it only at
+R = 0.99 (1.15×), the one configuration in the project where it does; there fixed nprobe needs 134
+cells for everyone, and the rule reaches the 256-cell cap for 27% of queries.
+
 ## 11. Limitations
 
-- One dataset and two values of nlist (4 096 and 1 024, §10). A second dataset was planned as an
-  extension and not done; the geometry argument (neighbours spread over many cells, cell boundaries
-  far below neighbour distances) suggests the picture depends on the data's intrinsic dimension.
+- Two datasets (SIFT1M, Deep1M) and two values of nlist on SIFT1M. Both datasets are dense
+  descriptors of similar dimension; a very different one (e.g. GloVe, angular, strong hubness)
+  was not tried.
 - The cap of 256 cells is a second parameter of every rule; the proposed rule hits it for 28% of
   queries at R = 0.99, the stopping rule for fewer.
 - With k = 10, per-query recall moves in steps of 0.1, so per-query targets 0.95 and 0.99 mean
