@@ -12,14 +12,68 @@ Status board (updated with every entry):
 | §0 Project setup | done |
 | §1 Data and index | done (index built, cached in `data/`) |
 | §2 Search machinery + tests | done (16 tests pass) |
-| §3 Oracle | done (`oracle.py`, 7 tests) |
+| §3 Oracle | done (`oracle.py`, 7 tests; 27 tests total) |
 | E1 fixed-nprobe curve | done (`results/02_fixed.csv`) |
 | E2 oracle + histogram | done (`results/03_oracle_*`) |
-| E3 ε sweep | not started |
-| E4 tune/test, RQ1/RQ2 | not started |
+| E3 ε sweep | done (`results/04_rule*`) |
+| E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
 | E5 timing | not started |
-| Plots | not started |
+| Plots | plots 1–4 done (`experiments/plots.py` → `results/plots/`) |
 | Extensions | not started |
+
+---
+
+## 2026-11-15 (later) — E3 ε sweep, E4 tune/test, plots 1–4
+
+**Done**
+- `rules.ratio_n_cells`, `oracle.at_cells`, `metrics.bootstrap_weights`.
+- **E3** (`experiments/04_rule.py`): the rule keeps a prefix of the nearest cells, so its result
+  at any ε is read off the E2 curves, with no search per ε. 151 ε values (0 plus 150 geometric
+  steps in 1e-3..1). Checked against the real path (`search_preassigned` + re-rank) on all 5000
+  test queries at ε ∈ {0.02, 0.06, 0.15}: 0 recall mismatches, 0 ndis mismatches, Faiss ndis equal.
+  New test `tests/test_rule_curves.py` (4 tests) checks the same on 500 tune queries.
+- **E4** (`experiments/05_tune_test.py`): nprobe (1..256) and ε tuned on tune, reported on test;
+  curve-based numbers at exactly R; captured share against both oracles; bootstrap 95% CIs
+  (1000 resamples of test queries, tune choices fixed).
+- `experiments/plots.py`: plots 1–4 (recall vs work, cells-needed histogram, rule vs oracle
+  2-D histogram, saving vs target).
+
+**Results (test split): the ratio rule needs MORE work than fixed nprobe**
+
+| R | nprobe / ε (tuned) | saving, tuned [95% CI] | saving, curve [95% CI] | oracle max | captured (Lagr.) |
+|---|---|---|---|---|---|
+| 0.80 | 13 / 0.180 | 0.77× [0.74, 0.79] | 0.79× [0.77, 0.81] | 1.71× | −65% |
+| 0.90 | 26 / 0.238 | 0.73× [0.71, 0.75] | 0.72× [0.70, 0.74] | 1.98× | −79% |
+| 0.95 | 45 / 0.286 | 0.76× [0.74, 0.79] | 0.73× [0.70, 0.75] | 2.35× | −66% |
+| 0.99 | 122 / 0.414 | 0.93× [0.91, 0.94] | 0.93× [0.88, 0.97] | 3.94× | −10% |
+
+(saving = work_fixed / work_rule including the 200 re-ranked; < 1 means the rule is worse.)
+Test recall of the tuned choices is within ±0.004 of R for both methods. At R = 0.99 the rule
+hits the 256 cap for 28% of queries (D1 threshold "a few percent" exceeded, see Next).
+
+**Why (diagnostics, scripts not committed; numbers at the ε tuned for R = 0.9):**
+- The rule *ranks* queries well: Spearman(rule cells, oracle c*(0.9)) = 0.70 (plot 3). Giving the
+  same cell counts to random queries is far worse (23 343 vs 9 399 ndis at R = 0.9), so the rule
+  carries real information. Cell sizes are not the issue (mean size 254 vs 273 for fixed).
+- It is **mis-calibrated**: mean 39 cells, p99 239, where fixed needs 26 for all. The count
+  grows explosively for queries with a flat centroid-distance profile (Spearman with d10/d1 =
+  −0.96), and the hardest queries soak up hundreds of cells at little recall per vector. The
+  Lagrangian oracle does the opposite: it gives up on expensive queries.
+- Exploration: **capping** the rule (cap tuned on tune from {8..256}, ε re-tuned) turns it
+  positive: 1.05× (R 0.8, cap 16), 1.07× (0.9, cap 32), 1.12× (0.95, cap 48), 1.18× (0.99,
+  cap 128) on test. Still far below the oracle.
+
+**Against the proposal's predictions:** the rule does not save 1.5–2×; uncapped it costs
+7–39% more work than fixed nprobe; capped it saves 5–18%. The saving does grow with the target.
+
+**Next**
+- Decide how to present this (both of us): the headline is a negative result for the plain rule
+  as proposed. Candidates: (a) make the cap part of the rule (two parameters, tuned on tune)
+  and report it as "rule + cap"; (b) extension 6 (map the rule's score to cells via a lookup
+  fitted on tune), since the ranking is good and only the mapping is wrong; (c) extension 3
+  (nlist 1024), where cells are bigger and more queries are easy.
+- Move the diagnostics (shuffled control, cap sweep, feature correlations) into a proper script.
+- E5 timing; it matters less now that the rule does not save scanned vectors.
 
 ---
 

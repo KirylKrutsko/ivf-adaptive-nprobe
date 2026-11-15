@@ -17,6 +17,9 @@ uv run python experiments/01_build.py   # download SIFT1M, ground truth, build +
 uv run pytest                            # correctness tests (need the built index)
 uv run python experiments/02_fixed.py   # E1: fixed-nprobe baseline -> results/
 uv run python experiments/03_oracle.py  # E2: per-query curves, both oracles, histogram data (~3 min)
+uv run python experiments/04_rule.py    # E3: ε sweep of the ratio rule (read off the E2 curves, checked vs real search)
+uv run python experiments/05_tune_test.py  # E4: tune/test, RQ1/RQ2 with bootstrap CIs
+uv run python experiments/plots.py      # plots 1-4 -> results/plots/
 ```
 
 ## Layout

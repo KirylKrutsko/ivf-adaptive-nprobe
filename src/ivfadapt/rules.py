@@ -36,3 +36,13 @@ def fixed_cells(Iq: np.ndarray, c: int) -> np.ndarray:
 
 def n_cells(cells: np.ndarray) -> np.ndarray:
     return (cells >= 0).sum(axis=1)
+
+
+def ratio_n_cells(Dq: np.ndarray, eps: float) -> np.ndarray:
+    """Number of cells the ratio rule keeps per query (same as n_cells(ratio_cells(...))).
+
+    Dq is sorted ascending, so the kept cells are a prefix and their count is enough to
+    look the result up in the oracle's per-query curves.
+    """
+    d1 = np.maximum(Dq[:, :1], 0.0)
+    return np.maximum((Dq <= (1.0 + eps) ** 2 * d1).sum(axis=1), 1)

@@ -151,3 +151,18 @@ def lagrangian_curve(curves: Curves, lambdas: np.ndarray | None = None) -> dict[
         chosen.append((c + 1).astype(np.int16))
     return {"lambda": lambdas, "work_mean": np.array(out_w), "recall_mean": np.array(out_r),
             "cells_mean": np.array(out_c), "cells": np.array(chosen)}
+
+
+# ---- reading any per-query cell allocation off the curves --------------------------------
+
+def at_cells(curves: Curves, n: np.ndarray) -> dict[str, np.ndarray]:
+    """Per-query recall / raw recall / coverage / work when query q scans its n[q] nearest cells.
+
+    Valid for any rule whose cells are a prefix of the quantizer order (the ratio rule, fixed
+    nprobe, the oracles): the curves already hold the result of every such prefix.
+    """
+    j = (np.clip(n, 1, curves.c_max) - 1).astype(np.int64)[:, None]
+    return {"recall": np.take_along_axis(curves.recall, j, axis=1)[:, 0],
+            "recall_raw": np.take_along_axis(curves.recall_raw, j, axis=1)[:, 0],
+            "coverage": np.take_along_axis(curves.coverage, j, axis=1)[:, 0],
+            "work": np.take_along_axis(curves.work, j, axis=1)[:, 0]}

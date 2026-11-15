@@ -32,3 +32,9 @@ def interp_work_at_recall(recall: np.ndarray, work: np.ndarray, target: float) -
         return float(w1)
     t = (target - r0) / (r1 - r0)
     return float(np.exp(np.log(w0) + t * (np.log(w1) - np.log(w0))))
+
+
+def bootstrap_weights(n: int, n_boot: int, seed: int) -> np.ndarray:
+    """(n_boot, n) resampling counts divided by n: `W @ x` is the mean of x over each resample."""
+    rng = np.random.default_rng(seed)
+    return rng.multinomial(n, np.full(n, 1.0 / n), size=n_boot).astype(np.float64) / n
