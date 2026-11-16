@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adaptive nprobe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0C111C; --paper:#131A28; --panel:#1C2638; --ink:#F1F4F8; --mute:#B6C0CF; --line:#4F5F7B; --faint:#253047;
+  --q:#FF4F86; --pt:#C3CCDA;
+  --c0:#5AA2FF; --c1:#FF9A3D; --c2:#4CD07D; --c3:#B48CFF; --c4:#5EE3EA; --c5:#F2D648;
+  --cellA:.26; --cellS:.6;
+  box-sizing:border-box;
+}
+html{height:100%}
+*,*::before,*::after{box-sizing:border-box}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,"Segoe UI",Roboto,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+#viewport{position:relative;width:100%;height:100%;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;background:var(--paper);transform-origin:center center;overflow:hidden}
+.m{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-weight:500;font-size:.92em}
+
+.slide{position:absolute;inset:0;padding:52px 72px 70px;display:none}
+.slide.active{display:block;animation:fadein .4s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+h2{font-size:40px;font-weight:600;letter-spacing:-.015em;line-height:1.1;margin:0 0 22px;white-space:nowrap}
+h2 .k{color:var(--q)}
+.kicker{font-size:19px;color:var(--q);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px}
+.split{display:grid;grid-template-columns:560px 1fr;gap:52px;align-items:center}
+.beats{display:flex;flex-direction:column;gap:22px;font-size:25px;line-height:1.3;color:var(--mute)}
+.beats p{margin:0}
+.beats b{color:var(--ink);font-weight:600}
+.small{font-size:20px;color:var(--mute)}
+.tiny{font-size:17px;color:var(--mute)}
+.chip{display:inline-block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:20px;padding:2px 10px;border-radius:6px;background:var(--panel);border:2px solid var(--line);color:var(--ink)}
+.chip.q{border-color:var(--q)}
+.bign{font-size:58px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--ink)}
+.bign.q{color:var(--q)}
+.bign small{font-size:.45em;font-weight:500;color:var(--mute);letter-spacing:0}
+.numcol{display:flex;flex-direction:column;gap:30px}
+.numcol .lbl{font-size:20px;color:var(--mute);margin-top:6px;line-height:1.3}
+.tag{display:inline-block;font-size:16px;color:var(--mute);border:1.5px solid var(--line);border-radius:20px;padding:2px 12px;margin-left:10px;vertical-align:middle;font-weight:500;letter-spacing:0}
+
+/* step reveal */
+[data-s]{transition:opacity .45s ease}
+[data-s]:not(.on){opacity:0;pointer-events:none}
+.off{opacity:0 !important}
+
+/* svg / charts */
+svg{display:block;overflow:visible}
+.gl{stroke:var(--faint);stroke-width:1}
+.ax{stroke:var(--line);stroke-width:2}
+.tk{fill:var(--mute);font-size:17px;font-family:"IBM Plex Mono",monospace}
+.axl{fill:var(--mute);font-size:18px}
+.lab{fill:var(--ink);font-size:20px;font-weight:500}
+.lab.mute{fill:var(--mute)}
+.lab.sm{font-size:17px}
+.val{fill:var(--ink);font-size:17px;font-family:"IBM Plex Mono",monospace;font-weight:500}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 1.5s cubic-bezier(.5,0,.2,1)}
+.draw.go{stroke-dashoffset:0}
+.grow{transform:scaleY(0);transform-box:fill-box;transition:transform .9s cubic-bezier(.5,0,.2,1)}
+.grow.down{transform-origin:top}.grow.up{transform-origin:bottom}
+.grow.go{transform:scaleY(1)}
+.growx{transform:scaleX(0);transform-box:fill-box;transform-origin:left;transition:transform .9s cubic-bezier(.5,0,.2,1)}
+.growx.rt{transform-origin:right}
+.growx.go{transform:scaleX(1)}
+.fade{opacity:0;transition:opacity .8s ease .3s}.fade.go{opacity:1}
+.cell{fill-opacity:var(--cellA);stroke:var(--ink);stroke-opacity:.45;stroke-width:2;stroke-linejoin:round;transition:fill-opacity .5s,stroke .5s,stroke-opacity .5s,opacity .5s}
+.cell.dim{fill-opacity:.06}
+.cell.lit{fill-opacity:.42;stroke:var(--q);stroke-opacity:1;stroke-width:3.5}
+.qhalo{fill:var(--q);fill-opacity:.22}
+.qdot{fill:var(--q);stroke:var(--paper);stroke-width:2}
+.qlab{fill:var(--q);font-weight:700;font-size:26px;font-style:italic}
+.pulse{animation:pulse 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.25}50%{transform:scale(1.7);opacity:.05}}
+.ray{stroke:var(--mute);stroke-opacity:.55;stroke-width:1.5}
+.pt{stroke:var(--paper);stroke-width:1}
+.q13{transition:opacity .4s}#s13.st1 .q13{opacity:0}
+
+/* footer (same as the IVF+PQ deck) */
+.foot{position:absolute;left:72px;right:72px;bottom:24px;display:flex;align-items:center;justify-content:space-between;font-size:17px;color:var(--mute);z-index:5}
+.track{display:flex;gap:22px}
+.track span{position:relative;padding-top:8px;transition:color .3s}
+.track span::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;border-radius:2px;background:var(--line)}
+.track span.cur{color:var(--ink);font-weight:600}
+.track span.cur::before{background:var(--q)}
+.track span.done::before{background:var(--mute)}
+.nav{display:flex;align-items:center;gap:10px}
+.nav button{font:inherit;font-size:20px;line-height:1;width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.nav button:focus-visible{outline:3px solid var(--q);outline-offset:2px}
+#counter{min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* title (same layout as the IVF+PQ deck) */
+#s1 .t-wrap{position:absolute;left:72px;top:120px;width:620px}
+#s1 h1{white-space:nowrap;font-size:118px;font-weight:700;letter-spacing:-.04em;line-height:.92;margin:0 0 30px}
+#s1 h1 .plus{color:var(--q)}
+#s1 .credits{margin-top:56px;font-size:20px;line-height:1.5;color:var(--mute);padding-left:14px;border-left:3px solid var(--q)}
+#s1 .sub{font-size:28px;line-height:1.3;color:var(--mute);max-width:540px}
+#s1 svg{position:absolute;right:56px;top:66px;opacity:.95}
+
+/* question slide */
+.ask{font-size:34px;line-height:1.25;font-weight:600;color:var(--ink);margin:0}
+.ask span{color:var(--q)}
+.ask-sub{font-size:21px;color:var(--mute);margin-top:10px}
+
+/* rq */
+.rq{display:grid;grid-template-columns:64px 1fr;gap:18px 18px;align-items:baseline;font-size:28px;line-height:1.3}
+.rq .n{font-family:"IBM Plex Mono",monospace;color:var(--q);font-weight:500;font-size:24px}
+.rq .t{color:var(--ink);font-weight:600}
+.rq .t span{display:block;font-weight:400;color:var(--mute);font-size:21px;margin-top:4px}
+.rq.big{font-size:38px;gap:40px 24px}.rq.big .n{font-size:30px}
+
+/* setup tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:18px}
+.tile{background:var(--panel);border:1.5px solid var(--line);border-radius:14px;padding:24px 24px 22px;min-height:230px}
+.tile .h{font-size:19px;color:var(--mute);margin-bottom:14px}
+.tile .bign{font-size:46px}
+.tile .d{font-size:20px;color:var(--mute);margin-top:12px;line-height:1.35}
+.tile .d b{color:var(--ink);font-weight:600}
+.strip{display:flex;gap:16px;margin-top:30px;align-items:center;font-size:21px;color:var(--mute)}
+
+/* flow (from the IVF+PQ deck) */
+.lane{display:flex;align-items:center;gap:0;margin-bottom:30px}
+.lane .lname{width:150px;font-size:20px;color:var(--mute);flex:none}
+.box{background:var(--panel);border:1.5px solid var(--line);border-radius:10px;padding:16px 14px;font-size:19px;line-height:1.3;text-align:center;width:196px;flex:none;color:var(--ink);align-self:stretch;display:flex;flex-direction:column;justify-content:center}
+.box.q{border-color:var(--q)}
+.box .s{display:block;color:var(--mute);font-size:16px;margin-top:6px}
+.arr{width:28px;flex:none;height:2px;background:var(--mute);position:relative}
+.arr::after{content:"";position:absolute;right:-1px;top:-5px;border:6px solid transparent;border-left:8px solid var(--mute);border-right:0}
+
+/* signals */
+.sig{display:grid;grid-template-columns:1fr 1fr;gap:18px 36px;margin-top:8px}
+.sig div{display:flex;gap:14px;align-items:center;font-size:22px;color:var(--ink)}
+.sig svg{width:44px;height:44px;flex:none}
+.ic{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.icq{fill:none;stroke:var(--q);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.bigq{margin-top:44px;font-size:36px;font-weight:600;line-height:1.25}
+.bigq span{color:var(--q)}
+
+/* formula */
+.fx{font-family:"IBM Plex Mono",monospace;font-size:44px;color:var(--ink);text-align:center;margin:36px 0 12px;letter-spacing:-.01em}
+.fx .a{color:var(--c0)}.fx .b{color:var(--q)}.fx .c{color:var(--c2)}
+.fxl{display:flex;justify-content:center;gap:56px;font-size:20px;color:var(--mute);margin-bottom:34px}
+.fxl span b{font-family:"IBM Plex Mono",monospace;font-weight:500}
+.eq2{text-align:center;font-size:26px;color:var(--mute);margin-top:8px}
+.eq2 b{color:var(--ink);font-weight:600}
+.consts{margin:30px auto 0;border-collapse:collapse;font-size:22px}
+.consts td,.consts th{padding:8px 26px;text-align:center}
+.consts th{color:var(--mute);font-weight:500;font-size:19px;border-bottom:1.5px solid var(--line)}
+.consts td{font-family:"IBM Plex Mono",monospace}
+.consts td:first-child{font-family:"Bricolage Grotesque",sans-serif;color:var(--mute);text-align:left}
+
+/* lists */
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:10px}
+.cols2 h3{font-size:24px;font-weight:600;margin:0 0 16px;color:var(--ink)}
+.dots{margin:0;padding:0;list-style:none;font-size:22px;color:var(--mute);line-height:1.35}
+.dots li{position:relative;padding-left:22px;margin-bottom:14px}
+.dots li::before{content:"";position:absolute;left:0;top:.52em;width:9px;height:9px;border-radius:50%;background:var(--mute)}
+.dots.q li::before{background:var(--q)}
+.dots b{color:var(--ink);font-weight:600}
+
+/* recap (same as the IVF+PQ deck) */
+.social{position:absolute;right:72px;bottom:82px;display:flex;align-items:baseline;gap:18px;font-size:21px}
+.social .ig{color:var(--mute);font-size:19px}
+.social a{color:var(--ink);text-decoration:none;font-weight:600;border-bottom:2px solid var(--q)}
+.social a:hover{color:var(--q)}
+.social a:focus-visible{outline:3px solid var(--q);outline-offset:3px}
+.recap{display:grid;grid-template-columns:repeat(3,1fr);gap:48px;margin-top:4px}
+.recap > div{font-size:26px;font-weight:600}
+.recap em{font-style:normal;font-weight:500;font-size:20px;color:var(--q);margin-left:6px}
+.recap ul{margin:12px 0 0;padding:0;list-style:none;font-size:20px;font-weight:400;color:var(--mute);line-height:1.35}
+.recap li{position:relative;padding-left:18px;margin-bottom:8px}
+.recap li::before{content:"";position:absolute;left:0;top:.55em;width:8px;height:8px;border-radius:50%;background:var(--mute)}
+.recap svg{width:100%;height:170px;margin-bottom:14px}
+
+.note{position:absolute;left:72px;bottom:84px;font-size:17px;color:var(--mute)}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important;animation:none !important}
+}
+</style>
+</head>
+<body>
+<div id="viewport">
+<div id="stage">
+
+<!-- 1 TITLE -->
+<section class="slide" id="s1" data-steps="1" data-sec="">
+  <div class="t-wrap">
+    <h1>nprobe<span class="plus">?</span></h1>
+    <div class="sub">How many cells should each query scan? A per-query search budget for IVF + PQ</div>
+    <div class="credits">AADS course, CUB 2026<br>Prepared by Kiryl and Matvey</div>
+  </div>
+  <svg id="v1" viewBox="0 0 600 600" width="580" height="580"></svg>
+</section>
+
+<!-- 2 RECAP IVF+PQ -->
+<section class="slide" id="s2" data-steps="4" data-sec="Recap">
+  <h2>IVF + PQ in one slide</h2>
+  <div class="split">
+    <svg id="v2" viewBox="0 0 600 600" width="540" height="540"></svg>
+    <div class="beats">
+      <p data-s="1"><b>k-means</b> splits space into <span class="chip">nlist</span> cells</p>
+      <p data-s="2">A query scans only the <span class="chip q">nprobe</span> nearest cells</p>
+      <p data-s="3">Vectors stored as <b>16-byte PQ codes</b>; the best 200 are re-ranked exactly</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 QUESTION -->
+<section class="slide" id="s3" data-steps="3" data-sec="Question">
+  <h2>Same <span class="k">nprobe</span> for every query?</h2>
+  <div class="split">
+    <svg id="v3" viewBox="0 0 600 600" width="540" height="540"></svg>
+    <div class="numcol" style="gap:56px">
+      <div data-s="1"><p class="ask">Do these two queries need <span>the same</span> number of cells?</p></div>
+      <div data-s="2"><p class="ask">What do we know about a query <span>before</span> scanning a single cell?</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 RQ -->
+<section class="slide" id="s4" data-steps="3" data-sec="Question">
+  <p class="kicker">Our project</p>
+  <h2>Choose <span class="k">nprobe per query</span></h2>
+  <div style="margin-top:70px" class="rq big">
+    <div class="n" data-s="1">RQ1</div><div class="t" data-s="1">At the same recall, how much less work than a fixed nprobe?</div>
+    <div class="n" data-s="2">RQ2</div><div class="t" data-s="2">How much of the best possible saving do we get?</div>
+  </div>
+</section>
+
+<!-- 5 SETUP: DATA -->
+<section class="slide" id="s5" data-steps="3" data-sec="Setup">
+  <h2>Setup</h2>
+  <div class="tiles">
+    <div class="tile" data-s="0"><div class="h">data</div><div class="bign">SIFT1M</div><div class="d"><b>1M</b> vectors · <b>128-d</b><br><b>10k</b> queries, exact top-10<br><span style="color:var(--q)">+ Deep1M</span> (96-d) as a check</div></div>
+    <div class="tile" data-s="1"><div class="h">index</div><div class="bign">IVF4096<br>PQ16×8</div><div class="d">Faiss · NumPy<br>re-rank top <b>200</b> exactly</div></div>
+    <div class="tile" data-s="2"><div class="h">protocol</div><div class="bign">5k | 5k</div><div class="d">tune parameters on one half,<br>report on the other<br>bootstrap 95% CIs</div></div>
+  </div>
+  <div class="strip" data-s="2">Every method searches this one index; <b style="color:var(--ink)">the only thing a method decides is which cells each query scans.</b></div>
+</section>
+
+<!-- 6 SETUP: METRIC -->
+<section class="slide" id="s6" data-steps="2" data-sec="Setup">
+  <h2>Measure: recall against work</h2>
+  <div class="split" style="grid-template-columns:720px 1fr">
+    <svg id="v6" viewBox="0 0 720 500" width="720" height="500"></svg>
+    <div class="beats">
+      <p><b>recall@10</b><br><span class="small">share of the true 10 found</span></p>
+      <p><b>work</b><br><span class="small">vectors scanned + 200 re-ranked</span></p>
+      <p data-s="1"><b>Targets</b> 0.8 · 0.9 · 0.95 · 0.99<br><span class="small">fixed nprobe needs 13 · 26 · 45 · 122 cells</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ORACLE HISTOGRAM -->
+<section class="slide" id="s7" data-steps="2" data-sec="Setup">
+  <h2>How many cells does a query <span class="k">really</span> need?</h2>
+  <div class="split" style="grid-template-columns:760px 1fr">
+    <svg id="v7" viewBox="0 0 760 500" width="760" height="500"></svg>
+    <div class="numcol" data-s="1">
+      <div><div class="bign">13</div><div class="lbl">median cells for recall 0.9</div></div>
+      <div><div class="bign">14%</div><div class="lbl">need ≤ 3 cells</div></div>
+      <div><div class="bign q">33%</div><div class="lbl">need more than 20</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 ORACLE CEILING -->
+<section class="slide" id="s8" data-steps="3" data-sec="Setup">
+  <h2>The oracle: the best any per-query choice can do</h2>
+  <div class="split" style="grid-template-columns:720px 1fr">
+    <svg id="v8" viewBox="0 0 720 500" width="720" height="500"></svg>
+    <div class="numcol">
+      <div data-s="2"><div class="bign q">2.0×</div><div class="lbl">less work at recall 0.9</div></div>
+      <div data-s="2"><div class="bign" style="font-size:40px">1.7× · 2.4× · 3.9×</div><div class="lbl">at 0.8 · 0.95 · 0.99</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 SCOREBOARD -->
+<section class="slide" id="s9" data-steps="2" data-sec="Setup">
+  <h2>The scoreboard</h2>
+  <svg id="v9" viewBox="0 0 1136 450" width="1136" height="450"></svg>
+  <p class="small" data-s="1" style="margin-top:8px">bar above the blue line = less work than fixed nprobe at the same recall</p>
+</section>
+
+<!-- 10 RATIO IDEA -->
+<section class="slide" id="s10" data-steps="3" data-sec="Heuristics">
+  <p class="kicker">Idea 1 · the proposal</p>
+  <h2>Scan cells almost as close as the nearest</h2>
+  <svg id="v10" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 11 RATIO RESULT -->
+<section class="slide" id="s11" data-steps="2" data-sec="Heuristics">
+  <p class="kicker">Idea 1 · result</p>
+  <h2>More work than fixed nprobe, at every target</h2>
+  <svg id="v11" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 12 RATIO WHY -->
+<section class="slide" id="s12" data-steps="3" data-sec="Heuristics">
+  <p class="kicker">Idea 1 · why</p>
+  <h2>Right queries, wrong amounts</h2>
+  <div class="split" style="grid-template-columns:780px 1fr">
+    <svg id="v12" viewBox="0 0 780 480" width="780" height="480"></svg>
+    <div class="numcol">
+      <div data-s="1"><div class="bign">25% <small>of queries</small></div><div class="lbl">use 63% of all work</div></div>
+      <div data-s="2"><div class="bign q">4%</div><div class="lbl">of their cells hold a true neighbour</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 GEOMETRY IDEA -->
+<section class="slide" id="s13" data-steps="3" data-sec="Heuristics">
+  <p class="kicker">Idea 2 · geometry</p>
+  <h2>Skip a cell if its boundary is too far</h2>
+  <div class="split">
+    <svg id="v13" viewBox="0 0 600 600" width="540" height="540"></svg>
+    <div class="beats">
+      <p data-s="1"><b>b</b> = distance to the cell's boundary<br><span class="small">nothing in the cell is closer than b</span></p>
+      <p data-s="2"><b>Two-stage:</b> scan a few cells, take the 10th-best distance <b>r</b>, then scan cells with <b>b &lt; r</b></p>
+      <p data-s="2" class="small">+ variants: gap d_j − d₁ ≤ δ, order cells by b, stop when b &gt; α·r</p>
+    </div>
+  </div>
+</section>
+
+<!-- 14 GEOMETRY RESULT -->
+<section class="slide" id="s14" data-steps="2" data-sec="Heuristics">
+  <p class="kicker">Idea 2 · result <span class="tag">tune split</span></p>
+  <h2>At best, as good as fixed nprobe</h2>
+  <svg id="v14" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 15 GEOMETRY WHY -->
+<section class="slide" id="s15" data-steps="3" data-sec="Heuristics">
+  <p class="kicker">Idea 2 · why</p>
+  <h2>In 128 dimensions every boundary is close</h2>
+  <svg id="v15" viewBox="0 0 1136 300" width="1136" height="300" style="margin-top:30px"></svg>
+  <div style="display:flex;gap:90px;margin-top:20px">
+    <div data-s="2"><div class="bign">99%</div><div class="small" style="margin-top:6px">of cells pass "b &lt; r"</div></div>
+    <div data-s="2"><div class="bign q">8%</div><div class="small" style="margin-top:6px">actually hold a neighbour</div></div>
+  </div>
+</section>
+
+<!-- 16 CAP -->
+<section class="slide" id="s16" data-steps="2" data-sec="Heuristics">
+  <p class="kicker">Idea 3 · a quick fix</p>
+  <h2>Cap it: never more than C cells</h2>
+  <svg id="v16" viewBox="0 0 1136 430" width="1136" height="430"></svg>
+  <p class="small" data-s="1" style="margin-top:6px">ε and C tuned together on tune: C = 16 / 32 / 48 / 128, about the nprobe you would use anyway</p>
+</section>
+
+<!-- 17 LEARN: QUESTION -->
+<section class="slide" id="s17" data-steps="3" data-sec="Fitted rule">
+  <p class="kicker">Idea 4 · learn the mapping</p>
+  <h2>The distance profile says more than one count</h2>
+  <div class="sig" data-s="1">
+    <div><svg viewBox="0 0 44 44"><path class="ic" d="M6 36h32M6 36V8"/><path class="icq" d="M8 30l6-2 6-3 6-2 6-1 6-1"/></svg>how flat the profile is: d<sub>j</sub> / d₁ at 15 ranks</div>
+    <div><svg viewBox="0 0 44 44"><circle class="ic" cx="12" cy="22" r="4"/><circle class="icq" cx="34" cy="22" r="3"/><path class="ic" d="M16 22h15" style="stroke-dasharray:3 3"/></svg>how far the query is from everything: d₁</div>
+    <div><svg viewBox="0 0 44 44"><rect class="ic" x="6" y="18" width="9" height="16" rx="2"/><rect class="icq" x="18" y="10" width="9" height="24" rx="2"/><rect class="ic" x="30" y="14" width="9" height="20" rx="2"/></svg>how big the nearby cells are</div>
+    <div><svg viewBox="0 0 44 44"><circle class="ic" cx="22" cy="22" r="14" style="stroke-dasharray:4 4"/><circle cx="22" cy="22" r="3" style="fill:var(--q)"/></svg>how many centroids within (1 + ε)·d₁: the old rule</div>
+  </div>
+  <p class="bigq" data-s="2">Many signals. <span>Which matter, and how to combine them?</span></p>
+  <p class="small" data-s="2" style="margin-top:14px">→ let a model learn it from the oracle</p>
+</section>
+
+<!-- 18 LEARN: HOW -->
+<section class="slide" id="s18" data-steps="3" data-sec="Fitted rule">
+  <h2>Learn how many cells each query needs</h2>
+  <div style="margin-top:56px">
+    <div class="lane" data-s="0">
+      <div class="lname">Train<br><span class="tiny">tune queries</span></div>
+      <div class="box">17 features<span class="s">from the centroid distances</span></div>
+      <div class="arr"></div>
+      <div class="box q">label<span class="s">cells the oracle gives this query</span></div>
+      <div class="arr"></div>
+      <div class="box">ridge regression<span class="s">on log(cells)</span></div>
+      <div class="arr"></div>
+      <div class="box">scale γ<span class="s">smallest reaching R on tune</span></div>
+    </div>
+    <div class="lane" data-s="1">
+      <div class="lname">Search<br><span class="tiny">test queries</span></div>
+      <div class="box">nearest centroids</div>
+      <div class="arr"></div>
+      <div class="box q">predict n cells</div>
+      <div class="arr"></div>
+      <div class="box">scan n cells<span class="s">in one go</span></div>
+      <div class="arr"></div>
+      <div class="box">re-rank 200</div>
+    </div>
+  </div>
+  <p class="small" data-s="2" style="margin-top:30px">One model per recall target · γ chosen on tune by cross-fitting · nothing decided during the scan</p>
+</section>
+
+<!-- 19 FITTED RESULT -->
+<section class="slide" id="s19" data-steps="2" data-sec="Fitted rule">
+  <p class="kicker">Idea 4 · result</p>
+  <h2>1.16–1.38× less work, from centroid distances alone</h2>
+  <svg id="v19" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 20 FITTED WEIGHTS -->
+<section class="slide" id="s20" data-steps="3" data-sec="Fitted rule">
+  <h2>Open the model</h2>
+  <div class="split" style="grid-template-columns:760px 1fr">
+    <svg id="v20" viewBox="0 0 760 500" width="760" height="500"></svg>
+    <div class="beats">
+      <p data-s="1"><b>Big weights cancel</b><br><span class="small">neighbouring ratios are near copies: correlation ≥ 0.99</span></p>
+      <p data-s="2"><b>Three features carry it</b><br><span class="small">how flat the profile is · d₁ · cell size</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 21 FITTED THREE -->
+<section class="slide" id="s21" data-steps="2" data-sec="Fitted rule">
+  <h2>Keep only three?</h2>
+  <svg id="v21" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 22 FITTED FORMULA -->
+<section class="slide" id="s22" data-steps="3" data-sec="Fitted rule">
+  <h2>Three features, one formula</h2>
+  <div class="small" style="text-align:center;margin-top:30px">cells to scan</div>
+  <div class="fx">n = A · <span class="b">(d₃₂ / d₁)</span><sup>a</sup> · <span class="a">d₁</span><sup>b</sup> · <span class="c">size</span><sup>c</sup></div>
+  <div class="fxl" data-s="1"><span><b style="color:var(--q)">flatter profile</b> → more cells</span><span><b style="color:var(--c0)">far from every centroid</b> → fewer</span><span><b style="color:var(--c2)">big nearby cells</b> → fewer</span></div>
+  <table class="consts" data-s="2" id="fconsts"></table>
+</section>
+
+<!-- 23 STOP IDEA -->
+<section class="slide" id="s23" data-steps="3" data-sec="Stopping rule">
+  <p class="kicker">Idea 5 · decide while scanning</p>
+  <h2>The search learns as it goes</h2>
+  <div class="sig" data-s="1">
+    <div><svg viewBox="0 0 44 44"><circle class="ic" cx="14" cy="22" r="5"/><path class="icq" d="M22 22h16"/><circle cx="38" cy="22" r="3" style="fill:var(--q)"/></svg>how far the current 10th-best is</div>
+    <div><svg viewBox="0 0 44 44"><circle class="ic" cx="10" cy="22" r="4"/><circle class="icq" cx="34" cy="22" r="7"/><path class="ic" d="M14 22h13" style="stroke-dasharray:3 3"/></svg>how far the next cell is</div>
+    <div><svg viewBox="0 0 44 44"><path class="ic" d="M8 34h28M8 34V10"/><path class="icq" d="M8 30l8-4 6-10 6-3 8-1"/></svg>is the top-10 still changing?</div>
+    <div><svg viewBox="0 0 44 44"><rect class="ic" x="6" y="10" width="10" height="24" rx="2"/><rect class="ic" x="18" y="10" width="10" height="24" rx="2"/><rect class="icq" x="30" y="10" width="8" height="24" rx="2"/></svg>how many cells so far</div>
+  </div>
+  <p class="bigq" data-s="2">Same recipe: <span>learn from the oracle when to stop</span></p>
+  <p class="small" data-s="2" style="margin-top:14px">scan in rounds · after each round P(continue) from 26 features · stop if P &lt; θ</p>
+</section>
+
+<!-- 24 STOP RESULT -->
+<section class="slide" id="s24" data-steps="2" data-sec="Stopping rule">
+  <p class="kicker">Idea 5 · result</p>
+  <h2>On SIFT1M: as much work saved as the fitted rule</h2>
+  <svg id="v24" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+</section>
+
+<!-- 25 STOP FORMULA -->
+<section class="slide" id="s25" data-steps="3" data-sec="Stopping rule">
+  <h2>Again: three features, one formula</h2>
+  <div class="small" style="text-align:center;margin-top:34px">after c cells, keep scanning while</div>
+  <div class="fx"><span class="a">d<sub>next</sub> / d₁</span> &lt; K · <span class="b">(r10 / d₁)</span><sup>p</sup> · <span class="c">c</span><sup>q</sup></div>
+  <div class="fxl"><span><b style="color:var(--c0)">d_next</b> next centroid</span><span><b style="color:var(--q)">r10</b> current 10th-best</span><span><b style="color:var(--c2)">c</b> cells scanned</span></div>
+  <div class="eq2" data-s="1">= the proposal's rule, with <b>1 + ε = K · (r10/d₁)<sup>p</sup> · c<sup>q</sup></b> instead of a constant</div>
+  <div class="eq2" data-s="2" style="margin-top:22px;font-size:22px">3 features = 26 up to recall 0.95 · on SIFT1M and Deep1M</div>
+</section>
+
+<!-- 26 DEEP1M -->
+<section class="slide" id="s26" data-steps="2" data-sec="Stopping rule">
+  <p class="kicker">Second dataset · Deep1M</p>
+  <h2>Longer hard tail: watching the scan pays more</h2>
+  <svg id="v26" viewBox="0 0 1136 440" width="1136" height="440"></svg>
+  <p class="small" data-s="1" style="margin-top:6px">Fitted on SIFT, used on Deep1M unchanged (target 0.9): the 3-feature formula reaches recall 0.93, the 26-feature model 0.68</p>
+</section>
+
+<!-- 27 TAIL -->
+<section class="slide" id="s27" data-steps="2" data-sec="Stopping rule">
+  <h2>Same average work: who gets a bad answer?</h2>
+  <p class="small" style="margin:-8px 0 26px">share of queries that find at most 5 of their 10 true neighbours, every method at the work of fixed nprobe 26 (recall ≈ 0.9)</p>
+  <svg id="v27" viewBox="0 0 1136 400" width="1136" height="400"></svg>
+</section>
+
+<!-- 28 TIMING: THE CATCH -->
+<section class="slide" id="s28" data-steps="2" data-sec="Timing">
+  <p class="kicker">Timing</p>
+  <h2>1.25× less work, so 1.25× faster?</h2>
+  <svg id="v28" viewBox="0 0 1136 450" width="1136" height="450" data-s="1"></svg>
+</section>
+
+<!-- 29 TIMING: WHY -->
+<section class="slide" id="s29" data-steps="3" data-sec="Timing">
+  <h2>Where the time goes</h2>
+  <div class="split" style="grid-template-columns:780px 1fr">
+    <svg id="v29" viewBox="0 0 780 420" width="780" height="420"></svg>
+    <div class="beats">
+      <p data-s="1"><b>Fitted rule</b><br><span class="small">its features need the 256 nearest centroids: 5× the centroid search</span></p>
+      <p data-s="2"><b>Stopping rule</b><br><span class="small">every round is a new Faiss call: the same 26 cells in 26 calls cost 5× one call</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 30 TIMING: C++ -->
+<section class="slide" id="s30" data-steps="2" data-sec="Timing">
+  <h2>Rewritten by hand in C++</h2>
+  <div class="split" style="grid-template-columns:780px 1fr">
+    <svg id="v30" viewBox="0 0 780 460" width="780" height="460"></svg>
+    <div class="beats">
+      <p><b>Inside Faiss's own scan</b><br><span class="small">one heap per query · fewer centroids requested · rule between rounds</span></p>
+      <p data-s="1"><b>Fitted rule: up to 1.12× faster</b><br><span class="small">3 features, decides once, scans in one go</span></p>
+      <p data-s="1"><b>Stopping rule: ≈ break-even</b><br><span class="small">interrupting the scan still costs what it saves</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 31 ONE GLANCE -->
+<section class="slide" id="s31" data-steps="2" data-sec="Wrap-up">
+  <h2>At a glance <span class="tag">SIFT1M · recall 0.9</span></h2>
+  <div class="split" style="grid-template-columns:740px 1fr">
+    <svg id="v31" viewBox="0 0 740 470" width="740" height="470"></svg>
+    <div class="numcol" data-s="1">
+      <div><div class="bign">2×</div><div class="lbl">possible, per query</div></div>
+      <div><div class="bign q">1.23–1.25×</div><div class="lbl">less work, both learned rules: a third of it</div></div>
+      <div><div class="bign" style="font-size:44px">≤ 1.12×</div><div class="lbl">faster: only the fitted rule turns it into time</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 32 LIMITS -->
+<section class="slide" id="s32" data-steps="2" data-sec="Wrap-up">
+  <h2>Limitations and next steps</h2>
+  <div class="cols2">
+    <div data-s="0"><h3>Limitations</h3><ul class="dots">
+      <li>Two dense datasets, one index type</li>
+      <li>Time gain small: <b>≤ 1.12×</b>, none at recall 0.8</li>
+      <li>Rules tied on SIFT1M only; on Deep1M the stopping rule saves more work</li>
+      <li>A cap of 256 cells for every method</li>
+    </ul></div>
+    <div data-s="1"><h3>Next</h3><ul class="dots q">
+      <li>Cheaper centroid search for far centroids</li>
+      <li>Data-aware features: cell radius, local density</li>
+      <li>Stopping rule without restarting the scan</li>
+      <li>Other indexes: HNSW search budget (ef)</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- 33 RECAP -->
+<section class="slide" id="s33" data-steps="1" data-sec="">
+  <h2>Recap</h2>
+  <div class="recap">
+    <div><svg id="r1" viewBox="0 0 300 220"></svg>Measure <em>oracle</em><ul><li>Queries need 1 to 200+ cells</li><li>Per-query choice: up to 2× at 0.9</li></ul></div>
+    <div><svg id="r2" viewBox="0 0 300 220"></svg>Diagnose <em>ratio rule</em><ul><li>Constant ε: more work, not less</li><li>Ranks queries right, floods the hard ones</li></ul></div>
+    <div><svg id="r3" viewBox="0 0 300 220"></svg>Learn <em>two rules</em><ul><li>1.16–1.38× less work, 3 features each</li><li>Fitted rule: up to 1.12× faster in C++</li></ul></div>
+  </div>
+  <p style="font-size:34px;font-weight:600;margin-top:22px">Questions?</p>
+  <div class="social"><span class="ig">Instagram</span><a href="https://www.instagram.com/kkkiryl/" target="_blank" rel="noopener">@kkkiryl</a><a href="https://www.instagram.com/talam0ana/" target="_blank" rel="noopener">@talam0ana</a></div>
+</section>
+
+<div class="foot">
+  <div class="track" id="track"></div>
+  <div class="nav"><button id="prev" aria-label="Previous">‹</button><span id="counter"></span><button id="next" aria-label="Next">›</button></div>
+</div>
+</div>
+</div>
+
+<script id="data" type="application/json">{"curve_fixed": [[479.2, 0.285], [757.4, 0.4245], [1313.9, 0.5734], [1869.0, 0.6616], [2420.8, 0.7203], [2971.8, 0.7629], [3520.9, 0.7947], [3793.4, 0.8086], [4336.0, 0.8319], [4877.8, 0.8508], [5416.2, 0.8675], [5954.6, 0.8801], [6494.9, 0.8918], [6764.7, 0.8975], [7299.0, 0.9069], [7834.0, 0.9139], [8367.5, 0.9209], [8900.2, 0.9269], [9433.2, 0.9321], [9699.5, 0.9345], [10229.4, 0.9386], [10757.9, 0.9428], [11287.4, 0.9468], [11814.1, 0.9507], [12338.9, 0.9533], [12602.1, 0.9548], [13126.8, 0.9572], [13652.6, 0.9596], [14177.5, 0.9619], [14700.4, 0.9639], [15223.9, 0.9655], [15484.2, 0.9663], [16006.5, 0.968], [16530.8, 0.9697], [17054.7, 0.9711], [17576.2, 0.9724], [18097.5, 0.9737], [18357.9, 0.9744], [18876.5, 0.9755], [19394.2, 0.9765], [19914.7, 0.9774], [20432.9, 0.9787], [20949.1, 0.9798], [21207.8, 0.9802], [21723.7, 0.981], [22239.6, 0.9819], [22754.8, 0.9826], [23272.3, 0.9832], [23788.7, 0.9837], [24047.1, 0.984], [24563.7, 0.9845], [25077.4, 0.9851], [25594.0, 0.9855], [26108.8, 0.9861], [26620.5, 0.9865], [26876.6, 0.9868], [27392.2, 0.9872], [27902.7, 0.9878], [28414.1, 0.9881], [28929.0, 0.9885], [29439.6, 0.9888], [29694.7, 0.989], [30203.8, 0.9893], [30714.6, 0.9896], [31223.1, 0.9898], [31734.9, 0.99], [32247.4, 0.9904], [32503.4, 0.9906], [33014.8, 0.9909], [33525.4, 0.9911], [34033.4, 0.9913], [34541.9, 0.9915], [35049.1, 0.9918], [35303.5, 0.992], [35811.1, 0.9921], [36316.9, 0.9923], [36824.2, 0.9924], [37330.3, 0.9926], [37833.1, 0.9928], [38083.3, 0.9929], [38588.1, 0.9931], [39093.2, 0.9932], [39593.4, 0.9933], [40097.6, 0.9935], [40601.6, 0.9937], [40856.5, 0.9938], [41360.0, 0.9939], [41865.3, 0.9939], [42368.5, 0.9942], [42874.3, 0.9942], [43379.1, 0.9943], [43629.0, 0.9943], [44134.3, 0.9944], [44639.9, 0.9945], [45143.9, 0.9946], [45649.1, 0.9947], [46152.2, 0.9948], [46402.4, 0.9949], [46905.3, 0.995], [47407.7, 0.9951], [47909.8, 0.9951], [48414.3, 0.9951], [48916.3, 0.9952], [49168.2, 0.9952], [49665.2, 0.9953], [50166.9, 0.9953], [50670.2, 0.9954], [51168.0, 0.9954], [51671.7, 0.9955], [51920.9, 0.9955], [52419.8, 0.9955], [52919.1, 0.9955], [53417.6, 0.9955], [53916.6, 0.9955], [54414.8, 0.9956], [54663.8, 0.9956], [55162.3, 0.9956], [55663.0, 0.9956], [56157.6, 0.9957], [56653.0, 0.9958], [57150.6, 0.9958], [57398.1, 0.9959], [57896.9, 0.9959], [58393.9, 0.9959], [58889.6, 0.9959], [59385.6, 0.996], [59884.1, 0.996], [60134.3, 0.996], [60629.7, 0.996], [61124.8, 0.996], [61622.8, 0.9961], [62120.9, 0.9961], [62618.9, 0.9962], [62865.4, 0.9962], [63360.0, 0.9963], [63858.8, 0.9964], [64354.0, 0.9964], [64849.3, 0.9964], [65344.7, 0.9964], [65841.4, 0.9964]], "curve_ratio": [[479.2, 0.285], [482.6, 0.287], [482.9, 0.2871], [483.1, 0.2873], [483.6, 0.2876], [484.0, 0.2879], [484.2, 0.288], [484.5, 0.2882], [484.9, 0.2885], [485.4, 0.2887], [485.5, 0.2888], [485.7, 0.2889], [486.6, 0.2896], [487.0, 0.2898], [487.4, 0.2899], [488.2, 0.2903], [489.7, 0.2911], [490.1, 0.2914], [490.4, 0.2915], [491.0, 0.2919], [493.0, 0.2927], [493.7, 0.2931], [494.2, 0.2935], [494.7, 0.2936], [496.4, 0.2945], [497.4, 0.295], [498.6, 0.2954], [500.6, 0.2962], [502.0, 0.2969], [503.4, 0.2976], [504.8, 0.2983], [507.8, 0.3002], [509.4, 0.3007], [511.0, 0.3017], [512.2, 0.3024], [515.0, 0.3041], [516.8, 0.3052], [519.0, 0.3065], [521.5, 0.3077], [526.0, 0.3098], [529.0, 0.3108], [531.6, 0.3119], [533.8, 0.3131], [540.2, 0.3162], [543.6, 0.3173], [546.6, 0.3189], [550.4, 0.3207], [557.7, 0.3242], [562.3, 0.3266], [565.9, 0.328], [577.1, 0.3326], [582.8, 0.3349], [587.6, 0.337], [593.6, 0.3397], [608.9, 0.3466], [615.9, 0.3492], [624.5, 0.3536], [631.9, 0.357], [650.6, 0.3641], [660.4, 0.3679], [671.6, 0.3727], [682.8, 0.3772], [709.2, 0.3868], [724.0, 0.3923], [740.0, 0.3975], [756.9, 0.4029], [794.2, 0.4148], [815.3, 0.422], [837.5, 0.4296], [861.0, 0.4376], [918.3, 0.4534], [951.4, 0.4623], [987.6, 0.4718], [1069.6, 0.4911], [1118.7, 0.5023], [1169.9, 0.5128], [1225.5, 0.5242], [1357.3, 0.5488], [1433.5, 0.5618], [1522.2, 0.5772], [1618.8, 0.5917], [1848.1, 0.6207], [1984.5, 0.6365], [2139.3, 0.6537], [2312.1, 0.6691], [2726.6, 0.7035], [2981.0, 0.722], [3272.8, 0.739], [3610.3, 0.7567], [4439.5, 0.7942], [4958.3, 0.8119], [5533.3, 0.8281], [6197.5, 0.8441], [7826.3, 0.8762], [8840.9, 0.8907], [9989.2, 0.9045], [12735.1, 0.9292], [14352.3, 0.9402], [16130.3, 0.9501], [18080.6, 0.959], [22451.5, 0.9729], [24804.5, 0.9782], [27244.3, 0.9823], [29749.3, 0.9859], [34798.1, 0.9907], [37247.7, 0.9923], [39632.7, 0.9936], [41901.1, 0.9943], [46145.6, 0.9955], [48074.4, 0.9958], [49836.8, 0.9961], [51493.8, 0.9962], [54370.8, 0.9963], [55593.8, 0.9964], [56697.5, 0.9964], [57696.3, 0.9964], [59365.3, 0.9964], [60061.9, 0.9964], [60708.9, 0.9964], [61834.0, 0.9964]], "curve_oracle": [[479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.2, 0.2852], [479.2, 0.2852], [479.3, 0.2853], [479.3, 0.2854], [479.5, 0.286], [479.9, 0.2875], [480.3, 0.2886], [481.9, 0.2924], [483.7, 0.2964], [488.3, 0.305], [492.5, 0.312], [503.1, 0.3273], [512.8, 0.3396], [531.6, 0.3603], [548.8, 0.377], [581.0, 0.4041], [604.2, 0.4212], [646.4, 0.4485], [682.1, 0.4687], [759.3, 0.5068], [855.0, 0.547], [925.6, 0.573], [1031.6, 0.6071], [1117.0, 0.631], [1248.8, 0.6633], [1360.2, 0.6872], [1528.0, 0.7185], [1645.6, 0.7378], [1851.4, 0.7673], [2008.6, 0.787], [2224.1, 0.8105], [2381.7, 0.8256], [2650.3, 0.848], [2862.0, 0.8635], [3158.7, 0.8825], [3325.9, 0.8917], [3620.4, 0.9061], [3809.0, 0.9141], [4144.7, 0.9265], [4352.1, 0.9333], [4727.2, 0.9439], [4968.9, 0.9499], [5330.3, 0.9577], [5574.9, 0.9623], [5994.2, 0.9692], [6213.1, 0.9724], [6622.9, 0.9776], [6881.6, 0.9804], [7268.4, 0.9842], [7548.1, 0.9865], [7892.4, 0.989], [8141.1, 0.9906], [8462.8, 0.9925], [8671.5, 0.9935], [8973.9, 0.9948], [9101.3, 0.9953], [9287.2, 0.9959], [9427.6, 0.9963], [9578.5, 0.9967], [9688.7, 0.9969], [9732.6, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997], [9744.9, 0.997]], "curve_pqt": [[553.5, 0.3213], [679.9, 0.3756], [869.9, 0.4412], [1120.1, 0.5145], [1449.3, 0.5881], [1918.7, 0.6676], [2612.0, 0.7498], [3745.3, 0.8324], [5732.1, 0.9168], [10984.4, 0.997]], "curve_cap32": [[479.2, 0.285], [482.6, 0.287], [482.9, 0.2871], [483.1, 0.2873], [483.6, 0.2876], [484.0, 0.2879], [484.2, 0.288], [484.5, 0.2882], [484.9, 0.2885], [485.4, 0.2887], [485.5, 0.2888], [485.7, 0.2889], [486.6, 0.2896], [487.0, 0.2898], [487.4, 0.2899], [488.2, 0.2903], [489.7, 0.2911], [490.1, 0.2914], [490.4, 0.2915], [491.0, 0.2919], [493.0, 0.2927], [493.7, 0.2931], [494.2, 0.2935], [494.7, 0.2936], [496.4, 0.2945], [497.4, 0.295], [498.6, 0.2954], [500.6, 0.2962], [502.0, 0.2969], [503.4, 0.2976], [504.8, 0.2983], [507.8, 0.3002], [509.4, 0.3007], [511.0, 0.3017], [512.2, 0.3024], [515.0, 0.3041], [516.8, 0.3052], [519.0, 0.3065], [521.5, 0.3077], [526.0, 0.3098], [529.0, 0.3108], [531.6, 0.3119], [533.8, 0.3131], [540.2, 0.3162], [543.6, 0.3173], [546.6, 0.3189], [550.4, 0.3207], [557.7, 0.3242], [562.3, 0.3266], [565.9, 0.328], [577.1, 0.3326], [582.8, 0.3349], [587.6, 0.337], [593.6, 0.3397], [608.9, 0.3466], [615.9, 0.3492], [624.5, 0.3536], [631.9, 0.357], [650.6, 0.3641], [660.4, 0.3679], [671.6, 0.3727], [682.8, 0.3772], [709.2, 0.3868], [724.0, 0.3923], [740.0, 0.3975], [756.9, 0.4029], [794.2, 0.4148], [815.3, 0.422], [837.5, 0.4296], [861.0, 0.4376], [918.3, 0.4534], [951.4, 0.4623], [987.6, 0.4718], [1069.6, 0.4911], [1118.7, 0.5023], [1169.7, 0.5128], [1225.1, 0.5242], [1355.3, 0.5488], [1430.5, 0.5618], [1517.7, 0.5772], [1610.9, 0.5914], [1827.3, 0.6202], [1952.9, 0.6356], [2091.4, 0.6524], [2240.5, 0.6673], [2578.9, 0.7002], [2772.2, 0.7176], [2979.9, 0.7333], [3200.0, 0.7497], [3680.1, 0.7827], [3938.1, 0.7977], [4191.4, 0.8109], [4454.1, 0.8236], [4963.8, 0.8485], [5231.7, 0.859], [5492.0, 0.8691], [5988.1, 0.8857], [6217.7, 0.8926], [6438.3, 0.8992], [6647.4, 0.9049], [7027.7, 0.9135], [7198.9, 0.9165], [7359.5, 0.9188], [7506.4, 0.9207], [7754.6, 0.9235], [7861.4, 0.9244], [7960.9, 0.9252], [8061.7, 0.9256], [8231.4, 0.9263], [8302.2, 0.9265], [8368.3, 0.9266], [8426.9, 0.9267], [8524.0, 0.9268], [8564.1, 0.9269], [8602.7, 0.9269], [8636.1, 0.9269], [8687.9, 0.9269], [8713.0, 0.9269], [8733.0, 0.9269], [8775.9, 0.9269]], "curve_fitted": [[479.2, 0.285], [479.2, 0.285], [479.2, 0.285], [479.3, 0.285], [479.5, 0.285], [480.3, 0.2853], [483.1, 0.2862], [489.8, 0.2884], [501.9, 0.2932], [516.2, 0.2988], [532.2, 0.3067], [552.2, 0.3159], [576.3, 0.3275], [600.2, 0.3386], [627.1, 0.351], [659.0, 0.3653], [691.7, 0.3797], [725.7, 0.396], [764.9, 0.4113], [808.6, 0.4271], [851.8, 0.4419], [900.5, 0.4588], [954.0, 0.4765], [1015.6, 0.4955], [1077.8, 0.5137], [1143.9, 0.5311], [1220.8, 0.5507], [1298.0, 0.5696], [1380.2, 0.586], [1477.5, 0.605], [1575.0, 0.6224], [1686.8, 0.6423], [1803.7, 0.6598], [1929.7, 0.6766], [2067.5, 0.6961], [2216.8, 0.7137], [2376.3, 0.7309], [2549.6, 0.7481], [2734.2, 0.7651], [2935.3, 0.7817], [3155.0, 0.7968], [3388.0, 0.8116], [3639.4, 0.8258], [3913.5, 0.839], [4205.0, 0.8516], [4524.2, 0.8633], [4864.3, 0.8744], [5231.2, 0.8851], [5622.4, 0.8956], [6050.8, 0.9055], [6512.1, 0.9143], [7009.7, 0.922], [7543.2, 0.9299], [8116.0, 0.9364], [8739.5, 0.9427], [9407.1, 0.9492], [10130.3, 0.9541], [10909.8, 0.9593], [11749.9, 0.9638], [12653.6, 0.9676], [13628.0, 0.9708], [14676.9, 0.9744], [15803.6, 0.9774], [17018.8, 0.9805], [18327.3, 0.9828], [19737.2, 0.9855], [21257.4, 0.9877], [22898.2, 0.9893], [24659.4, 0.9906], [26555.3, 0.9919], [28594.0, 0.9928], [30798.1, 0.9938], [33163.1, 0.9944], [35704.8, 0.9949], [38386.9, 0.9953], [41152.1, 0.9958], [43889.8, 0.9961], [46536.8, 0.9962], [49037.1, 0.9963], [51355.7, 0.9964]], "curve_stop": [[938.6, 0.4866], [1141.6, 0.5442], [1280.9, 0.5759], [1400.0, 0.6007], [1496.9, 0.618], [1581.6, 0.6325], [1660.4, 0.6457], [1735.0, 0.6576], [1799.3, 0.667], [1859.8, 0.6763], [1925.0, 0.6855], [1978.4, 0.692], [2031.2, 0.6984], [2085.0, 0.7053], [2134.8, 0.7107], [2182.7, 0.7162], [2230.1, 0.7217], [2275.9, 0.7262], [2322.5, 0.7314], [2366.5, 0.7362], [2409.8, 0.7402], [2455.9, 0.7446], [2502.8, 0.749], [2545.9, 0.7531], [2589.5, 0.7568], [2631.5, 0.7608], [2678.0, 0.7647], [2722.4, 0.7682], [2764.1, 0.7719], [2802.6, 0.7751], [2846.8, 0.7784], [2890.0, 0.7816], [2934.0, 0.7846], [2980.0, 0.788], [3024.4, 0.791], [3070.7, 0.7942], [3117.3, 0.7975], [3161.5, 0.8003], [3204.6, 0.8028], [3248.5, 0.8055], [3295.9, 0.8087], [3344.6, 0.812], [3391.1, 0.8146], [3443.2, 0.8177], [3491.9, 0.8201], [3541.4, 0.8226], [3596.6, 0.8258], [3651.0, 0.829], [3706.6, 0.8315], [3760.3, 0.8342], [3814.6, 0.8371], [3869.1, 0.8397], [3929.7, 0.8426], [3990.2, 0.8454], [4053.5, 0.8479], [4119.5, 0.8505], [4191.1, 0.8532], [4266.3, 0.8561], [4341.2, 0.8588], [4427.3, 0.8623], [4505.7, 0.8652], [4586.2, 0.868], [4676.9, 0.8709], [4768.0, 0.8738], [4864.3, 0.8771], [4970.1, 0.88], [5094.7, 0.8833], [5213.7, 0.8868], [5356.7, 0.8909], [5511.1, 0.8947], [5663.8, 0.8987], [5853.3, 0.9033], [6058.1, 0.9075], [6307.0, 0.9122], [6578.1, 0.9175], [6890.8, 0.9229], [7266.0, 0.9282], [7805.2, 0.9356], [8488.2, 0.9431], [9547.6, 0.9524], [10180.6, 0.957], [11013.5, 0.9626], [11828.0, 0.967], [12745.1, 0.9714], [13736.3, 0.9751], [14764.1, 0.9783], [15928.6, 0.9815], [17147.4, 0.9844], [18486.5, 0.9865], [19953.6, 0.9886], [21478.0, 0.9903], [23142.8, 0.9915], [24987.7, 0.9926], [26882.9, 0.9939], [28886.8, 0.9946], [30988.7, 0.9951], [33134.9, 0.9956], [35341.6, 0.9959], [37498.8, 0.9961], [39649.4, 0.9962], [41693.2, 0.9963], [43693.0, 0.9963], [45571.8, 0.9964], [47329.2, 0.9964], [48956.5, 0.9964], [50471.1, 0.9964], [51802.9, 0.9964], [52996.9, 0.9964], [54130.9, 0.9964], [55099.8, 0.9964], [56027.2, 0.9964], [56825.9, 0.9964], [57545.4, 0.9964], [58214.1, 0.9964], [58821.8, 0.9964], [59338.2, 0.9964], [59829.0, 0.9964], [60285.1, 0.9964], [60684.9, 0.9964], [61034.6, 0.9964]], "fixed_nprobe_points": [[13, 3793.4, 0.8086], [26, 7299.0, 0.9069], [45, 12338.9, 0.9533], [122, 32247.4, 0.9904]], "hist09": {"edges": [1, 2, 4, 8, 16, 32, 64, 128, 257], "share": [0.0356, 0.1076, 0.174, 0.2488, 0.236, 0.133, 0.0534, 0.0098], "never": 0.0018, "median": 13, "le3": 0.143, "gt20": 0.331}, "ratio_buckets": [{"label": "1–5", "queries": 0.172, "work": 0.016, "oracle_median": 3, "useful": 0.79}, {"label": "6–20", "queries": 0.294, "work": 0.103, "oracle_median": 8, "useful": 0.382}, {"label": "21–50", "queries": 0.281, "work": 0.25, "oracle_median": 16, "useful": 0.188}, {"label": "51–128", "queries": 0.198, "work": 0.388, "oracle_median": 28, "useful": 0.094}, {"label": "129–256", "queries": 0.054, "work": 0.242, "oracle_median": 47, "useful": 0.044}], "ratio_cells": {"mean": 38.6, "p99": 239, "fixed": 26}, "profiles": {"easy": [1.0, 1.2496, 1.3208, 1.3398, 1.3587, 1.4426, 1.4674, 1.5126, 1.5131, 1.5387, 1.5403, 1.5739, 1.5834, 1.5898, 1.5959, 1.6035, 1.6137, 1.6138, 1.6253, 1.6295, 1.6302, 1.6307, 1.6377, 1.6439, 1.6481, 1.6516, 1.6574, 1.6629, 1.6635, 1.669, 1.6749, 1.6816, 1.6855, 1.6861, 1.6877, 1.6909, 1.6996, 1.7002, 1.7123, 1.7155], "hard": [1.0, 1.0165, 1.0168, 1.0226, 1.025, 1.0345, 1.0426, 1.0441, 1.0498, 1.0527, 1.0583, 1.0588, 1.0693, 1.0739, 1.0787, 1.0791, 1.0855, 1.0865, 1.0874, 1.0928, 1.1092, 1.112, 1.114, 1.1166, 1.1178, 1.1262, 1.1347, 1.1363, 1.1368, 1.1376, 1.143, 1.1528, 1.1536, 1.1548, 1.1575, 1.1594, 1.1597, 1.1617, 1.1661, 1.1689], "easy_cells": 1, "hard_cells": 76, "easy_need": 1, "hard_need": 13, "eps": 0.2376}, "score_sift": {"ratio": [[0.765, 0.743, 0.789], [0.731, 0.709, 0.754], [0.765, 0.744, 0.788], [0.927, 0.909, 0.944]], "cap": [[1.11, null, null], [1.134, null, null], [1.158, null, null], [1.156, null, null]], "fitted": [[1.162, 1.152, 1.172], [1.232, 1.219, 1.246], [1.299, 1.284, 1.315], [1.381, 1.362, 1.402]], "stop": [[1.169, 1.155, 1.182], [1.247, 1.229, 1.265], [1.314, 1.294, 1.336], [1.34, 1.315, 1.366]], "compact": [[1.169, 1.157, 1.181], [1.247, 1.23, 1.265], [1.322, 1.301, 1.344], [1.292, 1.267, 1.317]], "oracle": [[1.706, null, null], [1.979, null, null], [2.354, null, null], [3.944, null, null]], "captured_stop": [0.315, 0.349, 0.37, 0.416]}, "score_deep": {"ratio": [0.87, 0.77, 0.78, 1.15], "cap": [1.12, 1.1, 1.19, 1.15], "fitted": [1.2, 1.2, 1.32, 1.52], "stop": [1.24, 1.26, 1.36, 1.65], "compact": [1.24, 1.26, 1.36, 1.55], "oracle": [1.64, 2.02, 2.64, 5.25], "captured_stop": [0.33, 0.42, 0.5, 0.53]}, "score_nlist1024": {"ratio": [0.92, 0.82, 0.82, 0.84], "cap": [1.05, 1.1, 1.12, 0.96], "stop": [1.25, 1.22, 1.31, 1.4], "oracle": [1.61, 1.86, 2.23, 3.79]}, "score_geometry": {"gap": [0.88, 0.9, 0.94, 1.08], "bound_thr": [0.86, 0.85, 0.88, 1.01], "bound_order": [0.96, 0.94, 0.92, 0.83], "twostage": [1.0, 0.94, 0.96, 1.11], "bound_stop": [0.95, 1.0, 1.05, 1.19], "patience": [1.05, 1.1, 1.14, null]}, "dropin": [{"nprobe": 13, "eps": 0.329, "drop": 0.0071, "saving": 1.117, "gain": 1.074, "trimmed": 0.172}, {"nprobe": 26, "eps": 0.329, "drop": 0.0118, "saving": 1.22, "gain": 1.112, "trimmed": 0.297}, {"nprobe": 45, "eps": 0.378, "drop": 0.0074, "saving": 1.248, "gain": 1.129, "trimmed": 0.321}, {"nprobe": 122, "eps": 0.547, "drop": 0.0006, "saving": 1.203, "gain": 1.167, "trimmed": 0.27}], "dropin_curve26": [[479.2, 0.285], [483.1, 0.2873], [484.0, 0.2879], [484.7, 0.2883], [485.5, 0.2888], [486.6, 0.2896], [488.2, 0.2903], [490.1, 0.2914], [491.7, 0.2923], [494.2, 0.2935], [496.4, 0.2945], [499.4, 0.2958], [503.4, 0.2976], [507.8, 0.3002], [512.2, 0.3024], [516.8, 0.3052], [523.5, 0.3085], [531.6, 0.3119], [540.2, 0.3162], [550.4, 0.3207], [562.3, 0.3266], [577.1, 0.3326], [593.6, 0.3397], [615.9, 0.3492], [640.5, 0.3609], [671.6, 0.3727], [709.2, 0.3868], [756.9, 0.4029], [815.3, 0.422], [887.3, 0.4447], [987.5, 0.4717], [1118.1, 0.5022], [1285.6, 0.5363], [1511.1, 0.5768], [1807.7, 0.6195], [2191.8, 0.6657], [2670.3, 0.7146], [3231.5, 0.76], [3849.0, 0.8021], [4455.5, 0.8366], [5048.9, 0.864], [5546.4, 0.8823], [5981.4, 0.8951], [6320.8, 0.9014], [6575.7, 0.9047], [6773.0, 0.9061], [6928.7, 0.9066], [7036.9, 0.9068], [7114.5, 0.9069], [7169.7, 0.9069], [7216.2, 0.9069]], "formula": {"0.8": {"K": 1.558, "p": 0.531, "q": -0.13}, "0.9": {"K": 1.527, "p": 0.644, "q": -0.085}, "0.95": {"K": 1.546, "p": 0.695, "q": -0.069}, "0.99": {"K": 1.551, "p": 0.727, "q": -0.039}}, "traces": {"easy": {"rows": [[1, 1.3138, 1.6202, 1.0966, 0.6], [2, 1.3165, 1.5271, 1.0966, 0.6], [3, 1.4072, 1.4585, 1.0775, 1.0], [4, 1.4272, 1.4232, 1.0775, 1.0], [5, 1.4392, 1.3963, 1.0775, 1.0], [6, 1.478, 1.3747, 1.0775, 1.0], [8, 1.5118, 1.3414, 1.0775, 1.0], [10, 1.5485, 1.3161, 1.0775, 1.0], [12, 1.5924, 1.2957, 1.0775, 1.0], [14, 1.62, 1.2788, 1.0775, 1.0], [16, 1.6279, 1.2643, 1.0775, 1.0], [20, 1.6848, 1.2404, 1.0775, 1.0], [24, 1.7312, 1.2213, 1.0775, 1.0]], "stop": 4, "need": 3}, "hard": {"rows": [[1, 1.0237, 1.6364, 1.1137, 0.2], [2, 1.0348, 1.519, 1.0875, 0.2], [3, 1.0484, 1.4525, 1.0705, 0.3], [4, 1.0518, 1.4101, 1.0622, 0.4], [5, 1.0561, 1.3765, 1.0539, 0.4], [6, 1.0576, 1.3468, 1.0437, 0.4], [8, 1.0589, 1.3049, 1.0323, 0.5], [10, 1.0684, 1.2803, 1.0323, 0.5], [12, 1.0933, 1.2605, 1.0323, 0.5], [14, 1.1034, 1.244, 1.0323, 0.5], [16, 1.118, 1.2299, 1.0323, 0.5], [20, 1.129, 1.1999, 1.0233, 0.8], [24, 1.1349, 1.1814, 1.0233, 0.8], [28, 1.1434, 1.1631, 1.0195, 0.9], [32, 1.1502, 1.15, 1.0195, 1.0]], "stop": 32, "need": 27}}, "weights": [{"name": "r10 / d₁", "w": 0.229, "dyn": true}, {"name": "r10 / d_next", "w": 1.294, "dyn": true}, {"name": "r1 / d₁", "w": 0.064, "dyn": true}, {"name": "d_next / d₁", "w": -1.329, "dyn": true}, {"name": "cells scanned", "w": -2.551, "dyn": true}, {"name": "rounds since change", "w": -0.55, "dyn": true}, {"name": "top-10 changes", "w": -0.126, "dyn": true}, {"name": "entered top-200", "w": 0.311, "dyn": true}, {"name": "r10 improvement", "w": 0.025, "dyn": true}, {"name": "d2 / d₁", "w": 0.145, "dyn": false}, {"name": "d3 / d₁", "w": 0.193, "dyn": false}, {"name": "d4 / d₁", "w": 0.216, "dyn": false}, {"name": "d6 / d₁", "w": 0.127, "dyn": false}, {"name": "d8 / d₁", "w": -0.131, "dyn": false}, {"name": "d12 / d₁", "w": -0.823, "dyn": false}, {"name": "d16 / d₁", "w": -0.552, "dyn": false}, {"name": "d24 / d₁", "w": -0.181, "dyn": false}, {"name": "d32 / d₁", "w": -0.626, "dyn": false}, {"name": "d48 / d₁", "w": -0.684, "dyn": false}, {"name": "d64 / d₁", "w": 0.915, "dyn": false}, {"name": "d96 / d₁", "w": 0.686, "dyn": false}, {"name": "d128 / d₁", "w": 1.854, "dyn": false}, {"name": "d192 / d₁", "w": -3.447, "dyn": false}, {"name": "d256 / d₁", "w": 2.241, "dyn": false}, {"name": "d₁", "w": 0.183, "dyn": false}, {"name": "list size", "w": -0.428, "dyn": false}], "ablation": {"all 26": [[1.169, 1.155, 1.182], [1.247, 1.229, 1.265], [1.314, 1.294, 1.336], [1.34, 1.315, 1.366]], "dynamic 9": [[1.165, 1.152, 1.178], [1.252, 1.234, 1.27], [1.276, 1.256, 1.298], [1.285, 1.26, 1.311]], "dynamic without patience/changes": [[1.169, 1.157, 1.181], [1.245, 1.228, 1.263], [1.322, 1.302, 1.345], [1.294, 1.268, 1.319]], "compact 3": [[1.169, 1.157, 1.181], [1.247, 1.23, 1.265], [1.322, 1.301, 1.344], [1.292, 1.267, 1.317]], "static 17": [[0.093, 0.091, 0.096], [0.138, 0.136, 0.14], [0.212, 0.21, 0.215], [0.501, 0.498, 0.503]]}, "tail": {"13": {"fixed": 0.1224, "ratio": 0.1608, "ratio_cap32": 0.1244, "fitted (08)": 0.0644, "stopping rule (11)": 0.0528, "oracle_lagrangian": 0.0132}, "26": {"fixed": 0.0254, "ratio": 0.0558, "ratio_cap32": 0.0162, "fitted (08)": 0.0084, "stopping rule (11)": 0.0034, "oracle_lagrangian": 0.0}}, "timing09": {"fixed, plain index.search": 0.1406, "fixed, preassigned path": 0.142, "fixed, preassigned in rounds (overhead check)": 0.5423, "ratio rule, cap 32": 0.1338, "stopping rule (rounds)": 0.511, "fitted": 0.1707}, "speedup": {"cap": [1.03, 1.051, 1.04, 1.085], "stop": [0.298, 0.275, 0.273, 0.333], "fitted": [0.756, 0.831, 0.925, 1.145]}, "cpp": {"stop": [0.956, 1.006, 0.913, 1.04], "fitted": [0.96, 1.022, 1.058, 1.117]}, "fitted_weights": [{"name": "d2 / d₁", "w": 0.073, "key": false}, {"name": "d3 / d₁", "w": 0.029, "key": false}, {"name": "d4 / d₁", "w": -0.04, "key": false}, {"name": "d6 / d₁", "w": 0.04, "key": false}, {"name": "d8 / d₁", "w": -0.077, "key": false}, {"name": "d12 / d₁", "w": -0.267, "key": false}, {"name": "d16 / d₁", "w": -0.198, "key": false}, {"name": "d24 / d₁", "w": -0.132, "key": false}, {"name": "d32 / d₁", "w": -0.301, "key": true}, {"name": "d48 / d₁", "w": -0.243, "key": false}, {"name": "d64 / d₁", "w": 0.019, "key": false}, {"name": "d96 / d₁", "w": 0.698, "key": false}, {"name": "d128 / d₁", "w": 0.717, "key": false}, {"name": "d192 / d₁", "w": -0.543, "key": false}, {"name": "d256 / d₁", "w": -0.401, "key": false}, {"name": "d₁", "w": -0.274, "key": true}, {"name": "cell size", "w": -0.262, "key": true}], "fitted_corr_neighbours": 0.986, "fitted17": [[1.162, 1.152, 1.172], [1.232, 1.219, 1.246], [1.299, 1.284, 1.315], [1.381, 1.362, 1.402]], "fitted3": [[1.163, 1.154, 1.173], [1.237, 1.224, 1.25], [1.292, 1.276, 1.307], [1.392, 1.372, 1.412]], "fitted_formula": {"0.8": {"A": 10043.62084831593, "a": -2.61, "b": -0.54, "c": -0.57}, "0.9": {"A": 6442381.647912218, "a": -4.34, "b": -1.25, "c": -0.87}, "0.95": {"A": 194412519.93981567, "a": -5.36, "b": -1.62, "c": -0.99}, "0.99": {"A": 21220044506.393467, "a": -6.72, "b": -2.02, "c": -1.23}}, "py_breakdown": [{"label": "plain Faiss", "quant": 0.0088, "rule": 0.0, "scan": 0.0943, "rerank": 0.0389}, {"label": "fitted rule", "quant": 0.0468, "rule": 0.0003, "scan": 0.0844, "rerank": 0.0393}, {"label": "stopping rule", "quant": 0.0469, "rule": 0.0563, "scan": 0.3686, "rerank": 0.0391}, {"label": "26 cells in 26 rounds", "quant": 0.0088, "rule": 0.0, "scan": 0.4946, "rerank": 0.0388}]}</script>
+<script>
+const $=id=>document.getElementById(id);
+const DATA=JSON.parse($('data').textContent);
+const TG=['0.8','0.9','0.95','0.99'];
+const col=k=>`var(--c${k})`;
+const COL={fixed:'var(--c0)',ratio:'var(--c1)',cap:'var(--c3)',fitted:'var(--c4)',stop:'var(--q)',compact:'var(--c2)',oracle:'var(--ink)',geo:'var(--c5)'};
+
+/* ---------- scales and small helpers ---------- */
+const lin=(d0,d1,r0,r1)=>v=>r0+(v-d0)/(d1-d0)*(r1-r0);
+const lg=(d0,d1,r0,r1)=>{const a=Math.log(d0),b=Math.log(d1);return v=>r0+(Math.log(v)-a)/(b-a)*(r1-r0)};
+const f1=v=>(+v).toFixed(1);
+const pathD=(pts,X,Y)=>pts.map((p,i)=>(i?'L':'M')+f1(X(p[0]))+' '+f1(Y(p[1]))).join('');
+const xfmt=v=>v>=1000?(v/1000)+'k':v;
+const fx=v=>v.toFixed(2).replace(/0$/,'')+'×';
+
+function lineChart(o){
+  const W=o.w,H=o.h,m=Object.assign({l:72,r:24,t:30,b:60},o.m||{});
+  const X=(o.x.log?lg:lin)(o.x.min,o.x.max,m.l,W-m.r), Y=lin(o.y.min,o.y.max,H-m.b,m.t);
+  let s='';
+  o.y.ticks.forEach(t=>{s+=`<line class="gl" x1="${m.l}" x2="${W-m.r}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tk" x="${m.l-12}" y="${f1(Y(t)+6)}" text-anchor="end">${o.y.fmt?o.y.fmt(t):t}</text>`});
+  o.x.ticks.forEach(t=>{s+=`<text class="tk" x="${f1(X(t))}" y="${H-m.b+30}" text-anchor="middle">${o.x.fmt?o.x.fmt(t):t}</text><line class="ax" x1="${f1(X(t))}" x2="${f1(X(t))}" y1="${H-m.b}" y2="${H-m.b+7}"/>`});
+  s+=`<line class="ax" x1="${m.l}" x2="${W-m.r}" y1="${H-m.b}" y2="${H-m.b}"/>`;
+  if(o.x.label)s+=`<text class="axl" x="${(m.l+W-m.r)/2}" y="${H-4}" text-anchor="middle">${o.x.label}</text>`;
+  if(o.y.label)s+=`<text class="axl" x="${m.l-60}" y="${m.t-12}">${o.y.label}</text>`;
+  if(o.pre)s+=o.pre(X,Y,m);
+  (o.series||[]).forEach(se=>{
+    const pts=se.pts.filter(p=>p[0]>=o.x.min&&p[0]<=o.x.max&&p[1]>=o.y.min-1e-9&&p[1]<=o.y.max+1e-9);
+    let g=se.dash?`<path class="anim fade" d="${pathD(pts,X,Y)}" style="fill:none;stroke:${se.color};stroke-width:${se.width||3};stroke-dasharray:${se.dash}"/>`
+                 :`<path class="anim draw" pathLength="1" d="${pathD(pts,X,Y)}" style="fill:none;stroke:${se.color};stroke-width:${se.width||3};stroke-linejoin:round;stroke-linecap:round"/>`;
+    if(se.label){const [lx,ly]=se.lab;g+=`<text class="lab anim fade" x="${f1(X(lx))}" y="${f1(Y(ly))}" style="fill:${se.color}" text-anchor="${se.anchor||'start'}">${se.label}</text>`}
+    s+=se.s!=null?`<g data-s="${se.s}">${g}</g>`:g;
+  });
+  if(o.post)s+=o.post(X,Y,m);
+  return s;
+}
+
+/* scoreboard: bars = × less work than fixed nprobe at matched recall, log scale, baseline 1 */
+function scoreboard(o){
+  const W=o.w||1136,H=o.h||470;
+  // legend rows first (wrap when too wide), so the plot starts below them
+  const items=o.methods.map(me=>({label:me.label,color:me.color,faded:me.faded,s:me.s}));
+  if(o.oracle)items.push({label:'oracle ceiling',oracle:true,s:o.oracleS});
+  const cw=9.6,rows=[[]];let lx=0;const L0=o.yl===false?56:96;
+  items.forEach(it=>{const w=it.label.length*cw+50;if(lx+w>W-L0-10&&rows[rows.length-1].length){rows.push([]);lx=0}it.x=lx;it.row=rows.length-1;rows[rows.length-1].push(it);lx+=w});
+  const m={l:L0,r:20,t:34+rows.length*28,b:58};
+  const ymin=o.ymin||0.6,ymax=o.ymax||4.6,Y=lg(ymin,ymax,H-m.b,m.t);
+  const groups=o.groups||TG, G=groups.length, gw=(W-m.l-m.r)/G, k=o.methods.length, gap=8;
+  const bw=Math.min(o.bw||52,(gw-70-(k-1)*gap)/k);
+  let s='';
+  (o.ticks||[0.6,0.75,1,1.25,1.5,2,3,4,5]).filter(t=>t>=ymin&&t<=ymax).forEach(t=>{s+=`<line class="gl" x1="${m.l}" x2="${W-m.r}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tk" x="${m.l-12}" y="${f1(Y(t)+6)}" text-anchor="end">${t}×</text>`});
+  s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${f1(Y(1))}" y2="${f1(Y(1))}" style="stroke:var(--c0);stroke-width:2.5"/>`;
+  s+=`<text class="lab sm" x="${W-m.r}" y="${f1(Y(1)+24)}" text-anchor="end" style="fill:var(--c0)">${o.baseLabel||'fixed nprobe'}</text>`;
+  if(o.yl!==false){const yc=(m.t+H-m.b)/2;s+=`<text class="axl" transform="translate(16,${f1(yc)}) rotate(-90)" text-anchor="middle" style="font-size:17px">${o.ylabel||'× less work than fixed nprobe'}</text>`}
+  groups.forEach((gname,g)=>{
+    const x0=m.l+g*gw+(gw-(k*bw+(k-1)*gap))/2;
+    s+=`<text class="tk" x="${f1(m.l+g*gw+gw/2)}" y="${H-m.b+34}" text-anchor="middle" style="fill:var(--ink)">${o.groupLabel?o.groupLabel(gname):'R = '+gname}</text>`;
+    if(o.oracle&&o.oracle[g]!=null){const yo=Y(Math.min(o.oracle[g],ymax));
+      s+=`<g ${o.oracleS!=null?`data-s="${o.oracleS}"`:''}><line class="anim fade" x1="${f1(x0-12)}" x2="${f1(x0+k*bw+(k-1)*gap+12)}" y1="${f1(yo)}" y2="${f1(yo)}" style="stroke:var(--ink);stroke-width:2.5;stroke-dasharray:7 5"/><text class="val anim fade" x="${f1(x0+(k*bw+(k-1)*gap)/2)}" y="${f1(yo-10)}" text-anchor="middle">${fx(o.oracle[g])}</text></g>`}
+    o.methods.forEach((me,i)=>{
+      const raw=me.vals[g]; if(raw==null)return;
+      const v=Array.isArray(raw)?raw[0]:raw, lo=Array.isArray(raw)?raw[1]:null, hi=Array.isArray(raw)?raw[2]:null;
+      const x=x0+i*(bw+gap), y1=Y(1), y2=Y(Math.max(ymin,Math.min(v,ymax))), up=v>=1;
+      const op=me.faded?.28:1;
+      let b=`<rect class="anim grow ${up?'up':'down'}" x="${f1(x)}" y="${f1(Math.min(y1,y2))}" width="${f1(bw)}" height="${f1(Math.max(2,Math.abs(y2-y1)))}" rx="4" style="fill:${me.color};opacity:${op}"/>`;
+      if(!me.faded&&lo!=null)b+=`<line class="anim fade" x1="${f1(x+bw/2)}" x2="${f1(x+bw/2)}" y1="${f1(Y(lo))}" y2="${f1(Y(hi))}" style="stroke:var(--ink);stroke-width:2"/>`;
+      const st=o.stagger&&i%2?18:0, fs=o.vfont||(bw<44?14:16);
+      // staggered charts: labels sit on two shared rows per group (above the tallest / below the lowest bar)
+      const gv=o.methods.filter(mt=>!mt.faded&&mt.vals[g]!=null).map(mt=>Array.isArray(mt.vals[g])?mt.vals[g][0]:mt.vals[g]);
+      const ly=o.stagger?(up?Y(Math.max(...gv.filter(u=>u>=1)))-10-st:Y(Math.min(...gv.filter(u=>u<1)))+fs+6+st)
+                       :(up?Y(Math.max(v,hi||v))-10:Y(Math.min(v,lo||v))+fs+6);
+      if(!me.faded&&!me.novals)b+=`<text class="val anim fade" x="${f1(x+bw/2)}" y="${f1(ly)}" text-anchor="middle" style="font-size:${fs}px">${v.toFixed(2)}</text>`;
+      s+=me.s!=null?`<g data-s="${me.s}">${b}</g>`:b;
+    });
+  });
+  items.forEach(it=>{const x=m.l+it.x,y=14+it.row*28;
+    const sw=it.oracle?`<line x1="${x}" x2="${x+22}" y1="${y+9}" y2="${y+9}" style="stroke:var(--ink);stroke-width:2.5;stroke-dasharray:6 4"/>`:`<rect x="${x}" y="${y}" width="18" height="18" rx="4" style="fill:${it.color}"/>`;
+    const g=`<g style="opacity:${it.faded?.45:1}">${sw}<text class="lab sm" x="${x+(it.oracle?30:26)}" y="${y+15}">${it.label}</text></g>`;
+    s+=it.s!=null?`<g data-s="${it.s}">${g}</g>`:g;});
+  return s;
+}
+
+/* horizontal bars */
+function hbars(o){
+  const W=o.w,m=Object.assign({l:260,r:90,t:20,b:40},o.m||{}),rh=o.rh||46;
+  const X=lin(o.min,o.max,m.l,W-m.r);let s='';
+  (o.ticks||[]).forEach(t=>{s+=`<line class="gl" x1="${f1(X(t))}" x2="${f1(X(t))}" y1="${m.t-6}" y2="${m.t+o.rows.length*rh}"/><text class="tk" x="${f1(X(t))}" y="${m.t+o.rows.length*rh+28}" text-anchor="middle">${o.tfmt?o.tfmt(t):t}</text>`});
+  if(o.base!=null)s+=`<line x1="${f1(X(o.base))}" x2="${f1(X(o.base))}" y1="${m.t-10}" y2="${m.t+o.rows.length*rh+4}" style="stroke:${o.baseColor||'var(--line)'};stroke-width:2.5"/>`;
+  o.rows.forEach((r,i)=>{
+    const y=m.t+i*rh, b=o.base||0, xa=X(Math.min(b,r.v)), xb=X(Math.max(b,r.v)), right=r.v>=b;
+    let g=`<text class="lab" x="${m.l-16}" y="${y+rh/2+7}" text-anchor="end" style="${r.dim?'fill:var(--mute)':''}">${r.label}</text>`;
+    g+=`<rect class="anim growx ${right?'':'rt'}" x="${f1(xa)}" y="${y+8}" width="${f1(Math.max(2,xb-xa))}" height="${rh-16}" rx="4" style="fill:${r.color};opacity:${r.faded?.3:1}"/>`;
+    g+=`<text class="val anim fade" x="${f1(right?xb+10:xa-10)}" y="${y+rh/2+6}" text-anchor="${right?'start':'end'}">${r.txt!=null?r.txt:r.v}</text>`;
+    s+=r.s!=null?`<g data-s="${r.s}">${g}</g>`:g;
+  });
+  return s;
+}
+
+/* ---------- 2-D toy geometry (title, recap, question, boundary) ---------- */
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(7);const gauss=()=>{let u=0;while(!u)u=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*R())};
+const d2=(a,b)=>(a[0]-b[0])**2+(a[1]-b[1])**2;
+function clip(poly,f){const o=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],fa=f(a),fb=f(b);if(fa<=0)o.push(a);if((fa<0&&fb>0)||(fa>0&&fb<0)){const t=fa/(fa-fb);o.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t])}}return o}
+const C=[];for(let i=0;i<4;i++)for(let j=0;j<4;j++)C.push([12+i*25+gauss()*5,12+j*25+gauss()*5].map(v=>Math.max(5,Math.min(95,v))));
+const cells=C.map((ck,k)=>{let poly=[[0,0],[100,0],[100,100],[0,100]];C.forEach((cj,j)=>{if(j===k)return;const mx=(cj[0]+ck[0])/2,my=(cj[1]+ck[1])/2,nx=cj[0]-ck[0],ny=cj[1]-ck[1];poly=clip(poly,p=>(p[0]-mx)*nx+(p[1]-my)*ny)});return poly});
+const PTS=[];C.forEach(c=>{for(let i=0;i<9;i++)PTS.push([c[0]+gauss()*6,c[1]+gauss()*6].map(v=>Math.max(2,Math.min(98,v))))});
+const nearest=p=>{let b=0;C.forEach((c,k)=>{if(d2(p,c)<d2(p,C[b]))b=k});return b};
+const order=p=>C.map((c,k)=>[Math.sqrt(d2(p,c)),k]).sort((a,b)=>a[0]-b[0]);
+const SX=x=>+(50+x*5).toFixed(1),SY=y=>+(50+(100-y)*5).toFixed(1);
+// easy query: close to a central centroid; hard query: where many centroids are almost equidistant
+const QE=(()=>{const c=C[5];return [c[0]+2.2,c[1]-1.8]})();
+const QH=(()=>{let best=null,bs=-1;for(let x=25;x<=75;x+=.5)for(let y=25;y<=75;y+=.5){const o=order([x,y]);const n=o.filter(v=>v[0]<=1.25*o[0][0]).length;const sc=n*10-Math.abs(x-62)-Math.abs(y-58);if(sc>bs&&d2([x,y],QE)>900){bs=sc;best=[x,y]}}return best})();
+const litBy=(q,eps)=>{const o=order(q);return o.filter(v=>v[0]<=(1+eps)*o[0][0]).map(v=>v[1])};
+const topN=(q,n)=>order(q).slice(0,n).map(v=>v[1]);
+function cellsSvg(cls){return C.map((_,k)=>`<polygon class="cell ${cls?cls(k):''}" data-k="${k}" points="${cells[k].map(p=>SX(p[0])+','+SY(p[1])).join(' ')}" style="fill:${col(k%6)}"/>`).join('')}
+const ptsSvg=(op=1)=>PTS.map(p=>`<circle class="pt" cx="${SX(p[0])}" cy="${SY(p[1])}" r="4.5" style="fill:${col(nearest(p)%6)};opacity:${op}"/>`).join('');
+const centSvg=()=>C.map((c,k)=>`<g transform="translate(${SX(c[0])},${SY(c[1])})"><circle r="8" style="fill:var(--paper);stroke:${col(k%6)};stroke-width:3"/><circle r="3" style="fill:${col(k%6)}"/></g>`).join('');
+const qSvg=(q,label,pulse=true)=>`<g transform="translate(${SX(q[0])},${SY(q[1])})">${pulse?'<circle r="16" class="qhalo pulse"/>':''}<circle r="15" class="qhalo"/><circle r="6.5" class="qdot"/>${label?`<text x="14" y="-14" class="qlab">${label}</text>`:''}</g>`;
+
+/* ---------- slides ---------- */
+// 1 title: two queries, the cells a per-query rule would scan for each
+(()=>{const le=litBy(QE,.25),lh=litBy(QH,.25);
+ $('v1').innerHTML=cellsSvg(k=>le.includes(k)||lh.includes(k)?'lit':'dim')+ptsSvg(.55)+centSvg()+qSvg(QE,'')+qSvg(QH,'');})();
+
+// 2 recap
+(()=>{const n=topN(QH,3);
+ $('v2').innerHTML=`<g id="v2c">${cellsSvg(()=> '')}</g>`+ptsSvg(.8)+`<g data-s="1">${centSvg()}</g>`+
+ `<g data-s="2">${n.map(k=>`<line class="ray" x1="${SX(QH[0])}" y1="${SY(QH[1])}" x2="${SX(C[k][0])}" y2="${SY(C[k][1])}" style="stroke:var(--q);stroke-opacity:.9;stroke-width:2.5"/>`).join('')}</g>`+qSvg(QH,'q',false);
+ const st=document.createElement('style');st.textContent=n.map(k=>`#s2.st2 .cell[data-k="${k}"]{fill-opacity:.45;stroke:var(--q);stroke-opacity:1;stroke-width:3.5}`).join('')+`#s2.st2 .cell:not(${n.map(k=>`[data-k="${k}"]`).join(',')}){fill-opacity:.07}`;document.head.appendChild(st);})();
+
+// 3 question: both queries scan the same 4 cells; then: what each actually needs
+(()=>{const fe=topN(QE,4),fh=topN(QH,4),ne=litBy(QE,.25),nh=litBy(QH,.25);
+ $('v3').innerHTML=cellsSvg(()=> '')+ptsSvg(.6)+centSvg()+qSvg(QE,'A',false)+qSvg(QH,'B',false);
+ const sel=a=>a.map(k=>`#s3 .cell[data-k="${k}"]`).join(',');
+ const st=document.createElement('style');
+ st.textContent=`#s3 .cell{fill-opacity:.07} ${sel([...new Set([...fe,...fh])])}{fill-opacity:.42;stroke:var(--q);stroke-opacity:1;stroke-width:3.5}`+
+  `#s3.st2 .cell{fill-opacity:.07;stroke:var(--ink);stroke-opacity:.45;stroke-width:2} #s3.st2 ${sel([...new Set([...ne,...nh])]).split(',').join(',#s3.st2 ')}{fill-opacity:.42;stroke:var(--q);stroke-opacity:1;stroke-width:3.5}`;
+ document.head.appendChild(st);})();
+
+// 6 fixed nprobe curve + targets
+const WX={min:250,max:70000,log:true,ticks:[300,1000,3000,10000,30000],fmt:xfmt,label:'work per query (log)'};
+const RY={min:0.5,max:1,ticks:[0.5,0.6,0.7,0.8,0.9,1],fmt:v=>v.toFixed(1),label:'recall@10'};
+$('v6').innerHTML=lineChart({w:720,h:500,x:WX,y:RY,series:[{pts:DATA.curve_fixed,color:COL.fixed,label:'fixed nprobe',lab:[9000,0.83]}],
+ post:(X,Y)=>`<g data-s="1">${DATA.fixed_nprobe_points.map(([p,w,r])=>`<line x1="${f1(X(250))}" x2="${f1(X(w))}" y1="${f1(Y(r))}" y2="${f1(Y(r))}" style="stroke:var(--line);stroke-dasharray:4 5;stroke-width:1.5"/><circle cx="${f1(X(w))}" cy="${f1(Y(r))}" r="7" style="fill:var(--c0);stroke:var(--paper);stroke-width:2"/><text class="val" x="${f1(X(w)+10)}" y="${f1(Y(r)+22)}">${p}</text>`).join('')}</g>`});
+
+// 7 histogram of cells needed (oracle, per-query target 0.9), doubling bins = equal widths
+(()=>{const h=DATA.hist09,W=760,H=500,m={l:76,r:20,t:30,b:64};
+ const nb=h.share.length, bw=(W-m.l-m.r)/(nb+1), Y=lin(0,0.28,H-m.b,m.t);let s='';
+ [0,0.1,0.2].forEach(t=>{s+=`<line class="gl" x1="${m.l}" x2="${W-m.r}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tk" x="${m.l-12}" y="${f1(Y(t)+6)}" text-anchor="end">${Math.round(t*100)}%</text>`});
+ const labs=h.edges.slice(0,-1).map((a,i)=>{const b=h.edges[i+1]-1;return a===b?`${a}`:`${a}–${Math.min(b,256)}`}).concat(['never']);
+ h.share.concat([h.never]).forEach((v,i)=>{const x=m.l+i*bw;const c=i===nb?'var(--mute)':(h.edges[i+1]<=4?'var(--c2)':'var(--c0)');
+  s+=`<rect class="anim grow up" x="${f1(x+4)}" y="${f1(Y(v))}" width="${f1(bw-8)}" height="${f1(Y(0)-Y(v))}" rx="4" style="fill:${c};transition-delay:${i*50}ms"/>`;
+  s+=`<text class="tk" x="${f1(x+bw/2)}" y="${H-m.b+30}" text-anchor="middle">${labs[i]}</text>`});
+ s+=`<line class="ax" x1="${m.l}" x2="${W-m.r}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+ s+=`<text class="axl" x="${(m.l+W)/2}" y="${H-4}" text-anchor="middle">cells this query needs for recall 0.9</text>`;
+ s+=`<text class="axl" x="${m.l-60}" y="${m.t-10}">share of test queries</text>`;
+ const xm=m.l+3*bw+bw*(Math.log2(13)-3);
+ s+=`<g data-s="1"><line x1="${f1(xm)}" x2="${f1(xm)}" y1="${m.t}" y2="${Y(0)}" style="stroke:var(--ink);stroke-width:2;stroke-dasharray:6 5"/><text class="lab" x="${f1(xm+8)}" y="${m.t+16}">median 13</text></g>`;
+ $('v7').innerHTML=s;})();
+
+// 8 oracle vs fixed
+$('v8').innerHTML=lineChart({w:720,h:500,x:WX,y:RY,series:[
+ {pts:DATA.curve_fixed,color:COL.fixed,label:'fixed nprobe',lab:[11000,0.82]},
+ {pts:DATA.curve_oracle,color:'var(--ink)',label:'oracle',lab:[1000,0.79],anchor:'end',s:1},
+ {pts:DATA.curve_pqt,color:'var(--mute)',dash:'7 6',width:2.5,label:'oracle, every query ≥ target',lab:[1500,0.555],s:1}],
+ post:(X,Y)=>`<g data-s="2"><line x1="${f1(X(3490))}" x2="${f1(X(6907))}" y1="${f1(Y(0.9))}" y2="${f1(Y(0.9))}" style="stroke:var(--q);stroke-width:4"/><circle cx="${f1(X(3490))}" cy="${f1(Y(0.9))}" r="6" style="fill:var(--q)"/><circle cx="${f1(X(6907))}" cy="${f1(Y(0.9))}" r="6" style="fill:var(--q)"/><text class="lab" x="${f1(X(4900))}" y="${f1(Y(0.9)-14)}" text-anchor="middle" style="fill:var(--q);font-weight:700">2.0×</text></g>`});
+
+// scoreboard data
+const S=DATA.score_sift;
+const M={ratio:{label:'ratio rule',color:COL.ratio,vals:S.ratio},cap:{label:'ratio + cap',color:COL.cap,vals:S.cap},
+ fitted:{label:'fitted static rule',color:COL.fitted,vals:S.fitted},stop:{label:'stopping rule',color:COL.stop,vals:S.stop},
+ compact:{label:'3-feature formula',color:COL.compact,vals:S.compact}};
+const mm=(k,extra)=>Object.assign({},M[k],extra||{});
+const OR=S.oracle.map(v=>v[0]);
+
+// 9 empty scoreboard: baseline and ceiling only
+$('v9').innerHTML=scoreboard({h:450,methods:[{label:'a method',color:'var(--line)',vals:[[1.3],[1.4],[1.5],[1.7]],s:1,novals:true}],oracle:OR,oracleS:0});
+
+// 10 ratio rule idea: two real distance profiles
+(()=>{const P=DATA.profiles,W=1136,H=470;let s='';const panel=(vals,x0,title,cells,need)=>{
+  const w=520,m={l:60,t:110,b:60},X=lin(0.5,40.5,x0+m.l,x0+w),Y=lin(1,1.6,H-m.b,m.t);let g='';
+  [1,1.2,1.4,1.6].forEach(t=>{g+=`<line class="gl" x1="${x0+m.l}" x2="${x0+w}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tk" x="${x0+m.l-10}" y="${f1(Y(t)+6)}" text-anchor="end">${t.toFixed(1)}</text>`});
+  vals.forEach((v,i)=>{const inn=v<=1+P.eps;g+=`<rect class="anim grow up pbar ${inn?'in':''}" x="${f1(X(i+1)-5)}" y="${f1(Y(Math.min(v,1.6)))}" width="10" height="${f1(Y(1)-Y(Math.min(v,1.6))+2)}" rx="2" style="transition-delay:${i*15}ms"/>`});
+  g+=`<text class="lab" x="${x0+m.l}" y="62" style="font-weight:600">${title}</text>`;
+  g+=`<text class="tk" x="${(x0+m.l+x0+w)/2}" y="${H-m.b+30}" text-anchor="middle">centroids by distance, 1 → 40</text>`;
+  g+=`<g data-s="1"><line x1="${x0+m.l}" x2="${x0+w}" y1="${f1(Y(1+P.eps))}" y2="${f1(Y(1+P.eps))}" style="stroke:var(--q);stroke-width:3;stroke-dasharray:8 5"/><text class="lab" x="${x0+w}" y="${f1(Y(1+P.eps)-10)}" text-anchor="end" style="fill:var(--q)">(1 + ε) · d₁</text></g>`;
+  g+=`<g data-s="2"><text class="lab" x="${x0+m.l}" y="90" style="fill:var(--q);font-weight:700">scans ${cells} cell${cells>1?'s':''}<tspan style="fill:var(--mute);font-weight:400"> · needs ${need}</tspan></text></g>`;
+  return g};
+ s+=`<text class="axl" x="0" y="16">distance to centroid ÷ distance to nearest centroid, two real SIFT queries</text>`;
+ s+=panel(P.easy,0,'easy query',P.easy_cells,P.easy_need)+panel(P.hard,590,'flat query',P.hard_cells,P.hard_need);
+ $('v10').innerHTML=s;
+ const st=document.createElement('style');st.textContent=`.pbar{fill:var(--line);transition:transform .9s cubic-bezier(.5,0,.2,1),fill .5s} #s10.st1 .pbar.in{fill:var(--q)}`;document.head.appendChild(st);})();
+
+// 11 ratio result
+$('v11').innerHTML=scoreboard({methods:[mm('ratio')],oracle:OR,oracleS:1});
+
+// 12 ratio why: share of queries vs share of work, by number of cells the rule picks
+(()=>{const B=DATA.ratio_buckets,W=780,m={l:150,t:84},rh=76,X=lin(0,0.45,m.l,W-40);let s='';
+ s+=`<text class="axl" x="0" y="14">cells the rule picks (ε for recall 0.9)</text>`;
+ s+=`<g><rect x="0" y="34" width="16" height="16" rx="3" style="fill:var(--line)"/><text class="lab sm" x="24" y="48">share of queries</text><g data-s="1"><rect x="200" y="34" width="16" height="16" rx="3" style="fill:var(--c1)"/><text class="lab sm" x="224" y="48">share of work</text></g></g>`;
+ B.forEach((b,i)=>{const y=m.t+i*rh;
+  s+=`<text class="lab" x="${m.l-16}" y="${y+34}" text-anchor="end">${b.label}</text>`;
+  s+=`<rect class="anim growx" x="${m.l}" y="${y+6}" width="${f1(X(b.queries)-m.l)}" height="24" rx="4" style="fill:var(--line)"/><text class="val" x="${f1(X(b.queries)+8)}" y="${y+24}">${Math.round(b.queries*100)}%</text>`;
+  s+=`<g data-s="1"><rect class="anim growx" x="${m.l}" y="${y+34}" width="${f1(X(b.work)-m.l)}" height="24" rx="4" style="fill:var(--c1)"/><text class="val" x="${f1(X(b.work)+8)}" y="${y+52}">${Math.round(b.work*100)}%</text></g>`;
+});
+ $('v12').innerHTML=s;})();
+
+// 13 boundary distance, 2-D
+(()=>{const q=[C[9][0]-6,C[9][1]+5];const o=order(q);const a=o[0][1],j=o[1][1];
+ const ca=C[a],cj=C[j];const mx=(ca[0]+cj[0])/2,my=(ca[1]+cj[1])/2,nx=cj[0]-ca[0],ny=cj[1]-ca[1],nl=Math.hypot(nx,ny);
+ const t=((mx-q[0])*nx+(my-q[1])*ny)/nl;const foot=[q[0]+t*nx/nl,q[1]+t*ny/nl];
+ const dir=[-ny/nl,nx/nl];const b1=[mx+dir[0]*60,my+dir[1]*60],b2=[mx-dir[0]*60,my-dir[1]*60];
+ const r=o[0][0]*1.15; const distToCell=k=>{if(k===a)return 0;let best=1e9;const pl=cells[k];for(let i=0;i<pl.length;i++){const p=pl[i],q2=pl[(i+1)%pl.length];const vx=q2[0]-p[0],vy=q2[1]-p[1];let u=((q[0]-p[0])*vx+(q[1]-p[1])*vy)/(vx*vx+vy*vy);u=Math.max(0,Math.min(1,u));best=Math.min(best,Math.hypot(p[0]+u*vx-q[0],p[1]+u*vy-q[1]))}return best};
+ const keep=C.map((_,k)=>distToCell(k)<r);
+ let s=`<defs><clipPath id="clip13"><rect x="50" y="50" width="500" height="500"/></clipPath></defs>`;
+ s+=cellsSvg(k=>k===a?'':'')+ptsSvg(.5)+centSvg();
+ s+=`<g data-s="1" clip-path="url(#clip13)"><line x1="${SX(b1[0])}" y1="${SY(b1[1])}" x2="${SX(b2[0])}" y2="${SY(b2[1])}" style="stroke:var(--ink);stroke-width:3"/><line x1="${SX(q[0])}" y1="${SY(q[1])}" x2="${SX(foot[0])}" y2="${SY(foot[1])}" style="stroke:var(--q);stroke-width:4"/><text class="qlab" x="${(SX(q[0])+SX(foot[0]))/2+8}" y="${(SY(q[1])+SY(foot[1]))/2-10}" style="font-size:24px">b</text></g>`;
+ s+=`<g data-s="2"><circle cx="${SX(q[0])}" cy="${SY(q[1])}" r="${r*5}" style="fill:var(--q);fill-opacity:.08;stroke:var(--q);stroke-width:2.5;stroke-dasharray:7 5"/><text class="qlab" x="${SX(q[0])-r*5*0.72-22}" y="${SY(q[1])+r*5*0.72+26}" style="font-size:24px">r</text></g>`;
+ s+=qSvg(q,'',false)+`<text class="qlab q13" x="${SX(q[0])+14}" y="${SY(q[1])-14}">q</text>`;$('v13').innerHTML=s;
+ const st=document.createElement('style');st.textContent=C.map((_,k)=>keep[k]?`#s13.st2 .cell[data-k="${k}"]{fill-opacity:.42;stroke:var(--q);stroke-opacity:1;stroke-width:3.5}`:`#s13.st2 .cell[data-k="${k}"]{fill-opacity:.06}`).join('');document.head.appendChild(st);})();
+
+// 14 geometry result (tune split)
+(()=>{const G=DATA.score_geometry;
+ $('v14').innerHTML=scoreboard({methods:[mm('ratio',{faded:true}),
+  {label:'gap rule',color:'var(--c5)',vals:G.gap},{label:'boundary threshold',color:'#C9A43A',vals:G.bound_thr},
+  {label:'order by boundary',color:'#9E8A3E',vals:G.bound_order},{label:'two-stage',color:'var(--c4)',vals:G.twostage,s:1},
+  {label:'boundary stop',color:'#3FA8B0',vals:G.bound_stop,s:1}],oracle:OR,bw:34,stagger:true,vfont:13});})();
+
+// 15 why: distances in 128-d on one axis
+(()=>{const W=1136,X=lin(0,260,40,W-40),y=150;let s=`<line class="ax" x1="40" x2="${W-40}" y1="${y}" y2="${y}"/>`;
+ [0,50,100,150,200,250].forEach(t=>{s+=`<line class="ax" x1="${f1(X(t))}" x2="${f1(X(t))}" y1="${y}" y2="${y+8}"/><text class="tk" x="${f1(X(t))}" y="${y+34}" text-anchor="middle">${t}</text>`});
+ s+=`<text class="axl" x="${W-40}" y="${y+64}" text-anchor="end">L2 distance from the query, median over SIFT tune queries</text>`;
+ const mk=(v,lab,color,st,up)=>`<g data-s="${st}"><circle cx="${f1(X(v))}" cy="${y}" r="10" style="fill:${color};stroke:var(--paper);stroke-width:3"/><text class="lab" x="${f1(X(v))}" y="${up?y-28:y-28}" text-anchor="middle" style="fill:${color}">${lab}</text></g>`;
+ s+=mk(60,'boundary b ≈ 60','var(--c5)',0);
+ s+=mk(213,'nearest centroid 213','var(--ink)',1);
+ s+=`<g data-s="1"><circle cx="${f1(X(226))}" cy="${y}" r="10" style="fill:var(--q);stroke:var(--paper);stroke-width:3"/><text class="lab" x="${f1(X(226))}" y="${y-62}" text-anchor="middle" style="fill:var(--q)">10th neighbour 226</text></g>`;
+ s+=`<g data-s="1"><rect x="${f1(X(0))}" y="${y-6}" width="${f1(X(226)-X(0))}" height="12" rx="6" class="anim growx" style="fill:var(--q);opacity:.35"/></g>`;
+ s+=`<g data-s="2"><text class="lab mute" x="${f1(X(60))}" y="${y+100}" text-anchor="middle">bound ≈ 0.2 × true distance</text></g>`;
+ $('v15').innerHTML=s;})();
+
+// 16 cap
+$('v16').innerHTML=scoreboard({h:430,methods:[mm('ratio',{faded:true}),mm('cap',{s:1})],oracle:OR});
+
+// 19 fitted rule result (work only)
+$('v19').innerHTML=scoreboard({methods:[mm('ratio',{faded:true}),mm('cap',{faded:true}),mm('fitted',{s:1})],oracle:OR});
+
+// 20 fitted rule weights (R = 0.9, standardised)
+(()=>{const w=DATA.fitted_weights.slice().sort((a,b)=>Math.abs(b.w)-Math.abs(a.w)).slice(0,12);
+ const big=w.slice(0,4).map(r=>r.name);
+ const rows=w.map(r=>({label:r.name,v:r.w,color:r.key?'var(--q)':'var(--line)',txt:(r.w>0?'+':'')+r.w.toFixed(2),cls:r.key?'key':(big.includes(r.name)?'big':'')}));
+ let s=hbars({w:740,rows,min:-1.2,max:1.1,base:0,ticks:[-1,-0.5,0,0.5,1],m:{l:200,t:76,r:70},rh:34});
+ s+=`<text class="axl" x="0" y="14">12 largest of 17 weights, recall 0.9 model (standardised features)</text>`;
+ s+=`<rect x="0" y="34" width="16" height="16" rx="3" style="fill:var(--q)"/><text class="lab sm" x="24" y="48">the three kept later</text><rect x="240" y="34" width="16" height="16" rx="3" style="fill:var(--line)"/><text class="lab sm" x="264" y="48">the others</text>`;
+ $('v20').innerHTML=s;
+ [...$('v20').querySelectorAll('text.lab')].forEach(t=>{const r=rows.find(r=>r.label===t.textContent);if(r&&r.cls)t.classList.add('w-'+r.cls)});
+ const st=document.createElement('style');st.textContent=`#s20.st1 .w-big{fill:var(--c5)} #s20.st2 .w-big{fill:var(--ink)} #s20.st2 .w-key{fill:var(--q);font-weight:700}`;document.head.appendChild(st);})();
+
+// 21 fitted: 17 features vs 3
+$('v21').innerHTML=scoreboard({methods:[{label:'17 features',color:COL.fitted,vals:DATA.fitted17},{label:'3 features: d₃₂/d₁, d₁, size',color:COL.compact,vals:DATA.fitted3,s:1}],oracle:OR,bw:60});
+
+// 22 fitted formula constants
+(()=>{const F=DATA.fitted_formula;$('fconsts').innerHTML=`<tr><th>recall target</th><th>a</th><th>b</th><th>c</th></tr>`+
+ TG.map(R=>`<tr><td>${R}</td><td>${F[R].a.toFixed(2)}</td><td>${F[R].b.toFixed(2)}</td><td>${F[R].c.toFixed(2)}</td></tr>`).join('');})();
+
+// 24 stopping rule result
+$('v24').innerHTML=scoreboard({methods:[mm('ratio',{faded:true}),mm('cap',{faded:true}),mm('fitted',{faded:true}),mm('stop',{s:1})],oracle:OR});
+
+// 26 Deep1M
+(()=>{const D2=DATA.score_deep;
+ $('v26').innerHTML=scoreboard({h:440,methods:[{label:'ratio rule',color:COL.ratio,vals:D2.ratio,faded:true},{label:'ratio + cap',color:COL.cap,vals:D2.cap,faded:true},{label:'fitted rule',color:COL.fitted,vals:D2.fitted},{label:'stopping rule',color:COL.stop,vals:D2.stop}],oracle:D2.oracle,ymax:5.6});})();
+
+// 27 tail: one budget (fixed nprobe 26), both learned rules
+(()=>{const T=DATA.tail['26'];const rows=[['fixed nprobe','fixed',COL.fixed],['ratio rule','ratio',COL.ratio],['ratio + cap 32','ratio_cap32',COL.cap],['fitted rule','fitted (08)',COL.fitted],['stopping rule','stopping rule (11)',COL.stop],['oracle','oracle_lagrangian','var(--ink)']]
+  .map(([l,k,c],i)=>({label:l,v:T[k]*100,color:c,txt:(T[k]*100).toFixed(1)+'%',s:(i===3||i===4)?1:null}));
+ $('v27').innerHTML=hbars({w:900,rows,min:0,max:6,ticks:[0,2,4,6],tfmt:v=>v+'%',m:{l:230,t:10},rh:58});})();
+
+// 28 Python timing: speed vs plain Faiss
+(()=>{const sp=DATA.speedup;
+ $('v28').innerHTML=scoreboard({h:450,methods:[{label:'fitted rule',color:COL.fitted,vals:sp.fitted},{label:'stopping rule',color:COL.stop,vals:sp.stop}],
+  ymin:0.2,ymax:1.4,ticks:[0.25,0.5,0.75,1,1.25],bw:70,baseLabel:'plain Faiss',ylabel:'× faster than plain Faiss (Python, single thread)'});})();
+
+// 29 where the time goes: stacked components at recall 0.9 (Python)
+(()=>{const B=DATA.py_breakdown,W=780,m={l:230,t:70,r:60},rh=74,X=lin(0,0.62,m.l,W-m.r);let s='';
+ const seg=[['quant','centroid search','var(--c3)'],['rule','rule','var(--q)'],['scan','scan cells','var(--c0)'],['rerank','re-rank','var(--line)']];
+ s+=`<text class="axl" x="0" y="14">ms per query at recall 0.9, Python on top of Faiss, single thread</text>`;
+ let lx=0;seg.forEach(([k,l,c])=>{s+=`<rect x="${lx}" y="32" width="16" height="16" rx="3" style="fill:${c}"/><text class="lab sm" x="${lx+24}" y="46">${l}</text>`;lx+=l.length*9.6+56});
+ B.forEach((b,i)=>{const y=m.t+i*rh;let x=m.l;const st=i===1?1:(i>=2?2:null);
+  let g=`<text class="lab" x="${m.l-16}" y="${y+rh/2+4}" text-anchor="end" style="${i===3?'fill:var(--mute)':''}">${b.label}</text>`;
+  seg.forEach(([k,,c])=>{const w=X(b[k])-X(0);if(w>0.5)g+=`<rect class="anim growx" x="${f1(x)}" y="${y+12}" width="${f1(w)}" height="${rh-28}" style="fill:${c}"/>`;x+=w});
+  const tot=b.quant+b.rule+b.scan+b.rerank;g+=`<text class="val anim fade" x="${f1(x+10)}" y="${y+rh/2+4}">${tot.toFixed(2)}</text>`;
+  s+=st!=null?`<g data-s="${st}">${g}</g>`:g;});
+ $('v29').innerHTML=s;})();
+
+// 30 C++ wall clock vs plain Faiss
+(()=>{const T=DATA.cpp;
+ $('v30').innerHTML=scoreboard({w:780,h:460,methods:[{label:'fitted rule, 3 features',color:COL.fitted,vals:T.fitted},{label:'stopping rule',color:COL.stop,vals:T.stop}],
+  ymin:0.8,ymax:1.25,ticks:[0.8,0.9,1,1.1,1.2],bw:44,baseLabel:'plain Faiss',ylabel:'× faster than plain Faiss (C++)'});})();
+
+// 31 one glance at recall 0.9
+(()=>{const g=DATA.score_geometry;const rows=[{label:'ratio rule',v:S.ratio[1][0],color:COL.ratio},{label:'best geometry',v:g.bound_stop[1],color:COL.geo},
+  {label:'ratio + cap',v:S.cap[1][0],color:COL.cap},{label:'fitted rule',v:DATA.fitted3[1][0],color:COL.fitted},{label:'stopping rule',v:S.stop[1][0],color:COL.stop},
+  {label:'oracle',v:S.oracle[1][0],color:'var(--ink)'}].map(r=>Object.assign(r,{txt:r.v.toFixed(2)+'×'}));
+ $('v31').innerHTML=`<text class="axl" x="0" y="20">× less work than fixed nprobe at recall 0.9</text>`+hbars({w:720,rows,min:0.5,max:2.2,base:1,baseColor:'var(--c0)',ticks:[0.5,1,1.5,2],tfmt:v=>v+'×',m:{l:220,t:46},rh:60});})();
+
+// 31 recap glyphs
+(()=>{const h=DATA.hist09;let s='';const X=lg(1,300,14,290),Y=lin(0,.16,200,20);
+ h.share.forEach((v,i)=>{const a=X(h.edges[i]),b=X(h.edges[i+1]);s+=`<rect x="${f1(a+1)}" y="${f1(Y(v))}" width="${f1(b-a-2)}" height="${f1(200-Y(v))}" rx="2" style="fill:${h.edges[i]>=24?'var(--q)':'var(--c0)'}"/>`});
+ $('r1').innerHTML=s+`<line x1="10" x2="292" y1="200" y2="200" class="ax"/>`;
+ let t='';const Y2=lg(0.6,4.4,200,20);[[0.77,3.9],[0.73,2],[0.77,2.4],[0.93,1.7]].forEach(([v,o],i)=>{const x=24+i*68;t+=`<rect x="${x}" y="${f1(Y2(1))}" width="40" height="${f1(Y2(v)-Y2(1))}" rx="3" style="fill:var(--c1)"/>`});
+ $('r2').innerHTML=`<line x1="10" x2="292" y1="${f1(Y2(1))}" y2="${f1(Y2(1))}" style="stroke:var(--c0);stroke-width:3"/>`+t+`<text x="150" y="70" text-anchor="middle" class="lab" style="fill:var(--c1);font-size:26px">0.73×</text>`;
+ $('r3').innerHTML=`<text x="150" y="80" text-anchor="middle" style="font-family:IBM Plex Mono,monospace;font-size:20px;fill:var(--ink)">n = A·(d₃₂/d₁)<tspan dy="-9" style="font-size:13px">a</tspan><tspan dy="9">·d₁</tspan><tspan dy="-9" style="font-size:13px">b</tspan><tspan dy="9">·size</tspan><tspan dy="-9" style="font-size:13px">c</tspan></text><text x="150" y="150" text-anchor="middle" class="lab" style="fill:var(--c4);font-size:34px;font-weight:700">1.24×</text><text x="150" y="182" text-anchor="middle" class="lab sm mute">less work at recall 0.9</text>`;})();
+
+/* ---------- deck engine (same controls as the IVF+PQ deck) ---------- */
+const slides=[...document.querySelectorAll('.slide')];
+const secs=['Recap','Question','Setup','Heuristics','Fitted rule','Stopping rule','Timing','Wrap-up'];
+$('track').innerHTML=secs.map(s=>`<span data-sec="${s}">${s}</span>`).join('');
+let cur=0,step=0;
+function render(){slides.forEach((s,i)=>{s.classList.toggle('active',i===cur);if(i!==cur)s.querySelectorAll('.anim.go').forEach(e=>e.classList.remove('go'))});
+ const s=slides[cur];
+ for(let k=1;k<10;k++)s.classList.toggle('st'+k,k<=step);
+ s.querySelectorAll('[data-s]').forEach(e=>e.classList.toggle('on',step>=+e.dataset.s));
+ requestAnimationFrame(()=>requestAnimationFrame(()=>s.querySelectorAll('.anim').forEach(e=>{const g=e.closest('[data-s]');e.classList.toggle('go',!g||g.classList.contains('on'))})));
+ const si=secs.indexOf(s.dataset.sec);
+ document.querySelectorAll('#track span').forEach((t,i)=>{t.classList.toggle('cur',i===si);t.classList.toggle('done',si>=0?i<si:cur>0)});
+ $('counter').textContent=`${cur+1} / ${slides.length}`;
+ try{history.replaceState(null,'','#'+(cur+1)+(step?'.'+step:''))}catch(e){}
+}
+function next(){const n=+slides[cur].dataset.steps||1;if(step<n-1)step++;else if(cur<slides.length-1){cur++;step=0}render()}
+function prev(){if(step>0)step--;else if(cur>0){cur--;step=(+slides[cur].dataset.steps||1)-1}render()}
+document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();next()}else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();prev()}else if(e.key==='Home'){cur=0;step=0;render()}else if(e.key==='End'){cur=slides.length-1;step=0;render()}else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen?.()}});
+$('next').addEventListener('click',e=>{e.stopPropagation();next()});
+$('prev').addEventListener('click',e=>{e.stopPropagation();prev()});
+$('stage').addEventListener('click',e=>{if(e.target.closest('.nav, a'))return;const r=$('stage').getBoundingClientRect();(e.clientX-r.left<r.width*.25)?prev():next()});
+let tx0=null;$('stage').addEventListener('touchstart',e=>{tx0=e.touches[0].clientX},{passive:true});
+$('stage').addEventListener('touchend',e=>{if(tx0===null)return;const dx=e.changedTouches[0].clientX-tx0;if(Math.abs(dx)>40){dx<0?next():prev()}tx0=null});
+function fit(){const v=$('viewport');const s=Math.min(v.clientWidth/1280,v.clientHeight/720);$('stage').style.transform=`translate(-50%,-50%) scale(${s})`}
+window.addEventListener('resize',fit);fit();
+(function(){const m=location.hash.match(/^#(\d+)(?:\.(\d+))?/);if(m){cur=Math.min(slides.length-1,Math.max(0,+m[1]-1));step=Math.min(+(m[2]||0),(+slides[cur].dataset.steps||1)-1)}render()})();
+</script>
+</body>
+</html>

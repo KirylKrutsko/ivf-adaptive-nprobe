@@ -18,6 +18,9 @@ Status board (updated with every entry):
 | E3 ε sweep | done (`results/04_rule*`) |
 | E4 tune/test, RQ1/RQ2 | done (`results/05_*`), **rule loses to fixed nprobe** |
 | E5 timing | done (`results/12_*`), rerun 2026-11-16 on Kiryl's machine (quoted in the report): capped rule 1.03–1.09×, stopping rule 0.27–0.33× |
+| Timing in C++ (stopping + fitted rule) | done (`cpp/`, SIFT1M): fitted rule, 3 features 0.96 / 1.02 / 1.06 / 1.12×; stopping rule 0.96 / 1.01 / 0.91 / 1.04× |
+| Fitted rule feature analysis | done (`17_fitted_rule_analysis.py`): 3 features (d32/d1, d1, size) = 17; closed form |
+| Presentation | `presentation/` (33 slides + speaker notes), fitted and stopping rule discussed together |
 | Plots | 1, 1b, 2, 3, 4, 4b, 5, 6, 7 (`results/plots/`), structure B |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
@@ -26,6 +29,86 @@ Status board (updated with every entry):
 | Fitted static rule, tune → test + live + timing | done on all three configs (`16_fitted_rule_tuned.py`): equal to the stopping rule on SIFT1M/4096 (ahead at 0.99), behind it on Deep1M and nlist 1024 |
 | Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 (night) — C++ timing of both learned rules; fitted rule in 3 features; presentation (Kiryl)
+
+**Done**
+- **C++ benchmark** (`cpp/stoprule_bench.cpp`, `cpp/run.sh`; Homebrew Faiss 1.16 = the pip version,
+  same index file). Our own scan loop on `IndexIVF::get_InvertedListScanner`, as
+  `search_preassigned` uses internally: one scanner and one heap per query kept across all cells.
+  Inputs exported by `cpp/export_inputs.py` (queries, ground truth, stopping-rule constants, Python
+  cells per query) and `cpp/export_fitted.py` (fitted-rule models). Single thread, 5 000 SIFT1M
+  test queries, median of 5, exact re-ranking included. Checks: the loop at fixed nprobe gives the
+  same top-10 as `index.search` for every query, same ndis, same time; both rules pick the Python
+  cells (0–2 mismatches in 5 000) with the expected recall. The C++ stopping rule's recall equals the
+  curve-read value exactly (one heap, no cross-round merge), which supports the explanation of the
+  0.0002–0.0007 live-vs-curves gap of 15 (merging candidate lists across rounds).
+- **Fitted rule analysis** (`experiments/17_fitted_rule_analysis.py`): correlations, weights,
+  subsets, greedy forward selection on tune only, closed form.
+- **Presentation** (`presentation/`): 33 slides (`adaptive-nprobe.html`, single file, same engine
+  and design as the IVF+PQ deck), speaker notes (`speaker-notes.md`, ~30 min), `build_data.py` +
+  `inject.py` rebuild the embedded numbers from `results/`.
+- `report/results.md`: §1 time columns (Python / C++) and a 3-feature fitted-rule row; §4 the
+  fitted rule in three features; §7 the C++ subsection; §8 time prediction; §11 limitation.
+
+**Results: speed vs plain `index.search` at the same recall (C++, SIFT1M)**
+
+| method | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| fitted rule, 3 features (asks for 64 centroids, 256 only for queries predicted to need more) | 0.96 | **1.02** | **1.06** | **1.12** |
+| fitted rule, 17 features (256 centroids for every query) | 0.75 | 0.83 | 0.92 | 1.14 |
+| stopping rule, 64 centroids first, 256 for queries that get that far (batched, resumed) | 0.96 | 1.01 | 0.91 | 1.04 |
+| stopping rule, 256 centroids up front | 0.75 | 0.82 | 0.91 | 1.09 |
+| control: rounds + rule evaluated but ignored, fixed nprobe | 0.99 | 0.98 | 0.95 | 0.99 |
+
+(Python prototype for comparison: fitted 0.76 / 0.83 / 0.93 / 1.15, stopping 0.30 / 0.28 / 0.27 / 0.33.)
+Noise ±3% between runs.
+
+- Rounds cost nothing once the scan is not restarted. The rule's check needs the current 10th-best
+  PQ distance; naively over the 200-entry heap it cost ~15 µs per query (max-heap array order makes a
+  front-to-back insertion pass shift constantly); since the 10th-best only shrinks, collecting the
+  entries ≤ its previous value branch-free and selecting among them costs ~3 µs.
+- Remaining cost: the centroid search. Selecting 26 / 64 / 256 nearest of 4 096 costs 0.018 / 0.025 /
+  0.060 ms per query; both rules need more than plain Faiss. The batched second search for queries
+  that need 256 has a large fixed cost per call (~0.14 s: 0.28 ms per query for a batch of ~500,
+  0.06 ms for ~3 000), not understood; it is why "ask for 32 first" loses from R = 0.9 up.
+- Scan time falls less than ndis (19% fewer vectors → ~10% less scan time at R = 0.9): fixed per-cell
+  cost (PQ table of the list) and the skipped cells are the small ones of easy queries. Re-ranking
+  (0.036 ms) does not shrink.
+
+**Results: the fitted rule needs three features (17)**
+
+- Neighbouring distance ratios correlate ≥ 0.986 from rank 8 on; weights cancel (d128 +0.72, d96
+  +0.70, d192 −0.54, d256 −0.40). Single ratio vs oracle cells: correlation saturates at rank 16
+  (−0.66).
+- Tuned saving on test: all 17 1.16 / 1.23 / 1.30 / 1.38; **d32/d1 + d1 + size 1.16 / 1.24 / 1.29 /
+  1.39** (CIs overlap everywhere); d16/d1 + d1 + size 1.16 / 1.24 / 1.26 / 1.33; d16/d1 alone 1.14 /
+  1.19 / 1.23 / 1.25; d1 + size only 1.12 / 1.14 / 1.16 / 1.15. Greedy on tune: d256/d1, size, d1.
+- Closed form n = A·(d32/d1)^a·d1^b·size^c, R = 0.9: a = −4.34, b = −1.25, c = −0.87 (a from −2.61 at
+  0.8 to −6.72 at 0.99). Far-from-everything queries get fewer cells (the oracle's "give up"), big
+  nearby cells fewer cells.
+- Fewer features are not faster by themselves; in C++ the 3-feature and 11-feature versions run at
+  the same speed. Time is set by how many nearest centroids the rule must select.
+
+**Reading (for the presentation; Kiryl).** In work the two learned rules tie on SIFT1M and the
+stopping rule is ahead on Deep1M and nlist 1024 (Matvei's entry below). In time, implemented
+carefully in C++, only the fitted rule's saving survives (2–12% from R = 0.9 up, none at 0.8; SIFT1M
+only); the stopping rule is break-even, because stopping mid-scan needs far centroids up front or
+fetched later, and the extra centroid search costs what its extra saving would bring. The
+presentation therefore discusses the two rules together: the fitted rule first (ML introduced
+there, feature analysis, formula), then the stopping rule more briefly, then timing (Python →
+why → C++). This differs from structure B of the report (stopping rule as headline); both
+readings are supported by the numbers: stopping rule = best work saving, fitted rule = the one
+that is faster in practice.
+
+**Next**
+- Both: agree on the headline for the report (structure B vs "two rules, one practical").
+- Optional: cell-level data features for the fitted rule (cell radius, d1/radius, local
+  neighbour radius: free lookups at query time); for the stopping rule the highest cell rank among
+  the current top-10. Timing on Deep1M in C++. The fixed cost of the batched 256-centroid search.
+- `report/guide_ru.md` §9 (time) does not have the C++ results yet.
 
 ---
 

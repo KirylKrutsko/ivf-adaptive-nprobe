@@ -25,12 +25,13 @@ on tune is chosen and reported on test. 95% confidence intervals are bootstraps 
 
 Work saving relative to fixed nprobe at matched mean recall@10 (ratio of work; > 1 = less work).
 
-| method | parameters tuned on tune | R = 0.80 | R = 0.90 | R = 0.95 | R = 0.99 | time, R = 0.9 |
+| method | parameters tuned on tune | R = 0.80 | R = 0.90 | R = 0.95 | R = 0.99 | time vs plain Faiss, R = 0.9: Python / C++ |
 |---|---|---|---|---|---|---|
 | ratio rule as proposed, d_j ≤ (1+ε) d_1 | ε | 0.77× [0.74, 0.79] | 0.73× [0.71, 0.75] | 0.77× [0.74, 0.79] | 0.93× [0.91, 0.94] | – |
-| ratio rule + cap on the number of cells | ε, cap | 1.11× [1.10, 1.12] | 1.13× [1.12, 1.15] | 1.16× [1.15, 1.17] | 1.16× [1.14, 1.17] | 1.05× faster |
-| static rule fitted to the oracle (centroid distances only) | linear model per R, scale γ | 1.16× [1.15, 1.17] | 1.23× [1.22, 1.25] | 1.30× [1.28, 1.32] | 1.38× [1.36, 1.40] | 0.83× (slower; §7) |
-| stopping rule on scan feedback | logistic model per R, θ | 1.17× [1.16, 1.18] | 1.25× [1.23, 1.27] | 1.31× [1.29, 1.34] | 1.34× [1.32, 1.37] | 0.28× (slower; §7) |
+| ratio rule + cap on the number of cells | ε, cap | 1.11× [1.10, 1.12] | 1.13× [1.12, 1.15] | 1.16× [1.15, 1.17] | 1.16× [1.14, 1.17] | 1.05× / – |
+| static rule fitted to the oracle (centroid distances only) | linear model per R, scale γ | 1.16× [1.15, 1.17] | 1.23× [1.22, 1.25] | 1.30× [1.28, 1.32] | 1.38× [1.36, 1.40] | 0.83× / – |
+| static fitted rule, 3 features: d₃₂/d₁, d₁, cell size (§4) | linear model per R, scale γ | 1.16× [1.15, 1.17] | 1.24× [1.22, 1.25] | 1.29× [1.28, 1.31] | 1.39× [1.37, 1.41] | – / **1.02×** |
+| stopping rule on scan feedback | logistic model per R, θ | 1.17× [1.16, 1.18] | 1.25× [1.23, 1.27] | 1.31× [1.29, 1.34] | 1.34× [1.32, 1.37] | 0.28× / 1.01× |
 | stopping rule, 3-feature closed form (§5) | K, p, q per R | 1.17× [1.16, 1.18] | 1.25× [1.23, 1.26] | 1.32× [1.30, 1.34] | 1.29× [1.27, 1.32] | as above |
 | oracle, best mean recall (ceiling) | – | 1.71× | 1.98× | 2.35× | 3.94× | – |
 | share of the oracle saving captured by the stopping rule | | 32% [29, 34] | 35% [32, 37] | 37% [35, 40] | 42% [37, 44] | |
@@ -39,16 +40,21 @@ Fixed nprobe needs 13 / 26 / 45 / 122 cells (work 3 793 / 7 299 / 12 339 / 32 24
 targets. Tuned choices land within 0.012 of the target recall on test (the capped, fitted and
 stopping rules within 0.006; fixed nprobe overshoots by up to 0.009 because nprobe is an integer,
 the plain ratio rule by up to 0.012). Every row is tuned on
-tune and evaluated on test the same way (`05`, `11`, `15`, `16`); the time column is one
-single-threaded run on one machine (§7).
+tune and evaluated on test the same way (`05`, `11`, `15`, `16`, `17`); the time column is one
+single-threaded run on one machine: our Python prototype on top of Faiss, and the C++
+implementation inside Faiss's scan loop (§7; C++ only for the two learned rules, the fitted rule in
+its 3-feature form).
 
 In words: the rule of the proposal costs **more** work than a fixed nprobe at every target; with a
 cap on the number of cells it saves 11–16%, and this is the only rule whose saving also shows in
 time at every target in our implementation. A rule fitted to the oracle, on the same centroid distances, saves
 16–38%, and the stopping rule, which also watches how the scan is going, 17–34%: on SIFT1M the
 two are equal within the confidence intervals up to R = 0.95 and the static rule is ahead at
-R = 0.99. Both capture about a third of what an oracle could save; the remaining two thirds are
-not visible to the search.
+R = 0.99 (on Deep1M and with nlist = 1 024 the stopping rule is ahead, §5). Both capture about a
+third of what an oracle could save; the remaining two thirds are not visible to the search. In
+time the picture changes: implemented in C++ inside Faiss's scan loop, the fitted rule, which
+decides once and scans in one go, is 0.96 / 1.02 / 1.06 / 1.12× as fast as plain Faiss; the
+stopping rule, which interrupts the scan, is about break-even (0.96 / 1.01 / 0.91 / 1.04×).
 
 ## 2. How many cells does a query need? (Figure 2)
 
@@ -131,6 +137,25 @@ on the quantizer output, the fitted rule is the best, and on SIFT1M it is as goo
 rule of §5; on Deep1M and with nlist = 1 024 it is behind it (§5). The catch is time: its features need
 the 256 nearest centroids, a quantizer call five times as expensive as for 26, which eats the
 saving below R = 0.99 (§7).
+
+**The fitted rule in three features** (`17_fitted_rule_analysis.py`). As in the stopping rule's
+model, most of the 17 features are near copies: neighbouring distance ratios correlate at ≥ 0.986
+from rank 8 on, and the model gives them large weights of opposite sign that cancel (d₁₂₈ +0.72,
+d₉₆ +0.70, d₁₉₂ −0.54, d₂₅₆ −0.40 at R = 0.9). The correlation of a single ratio with the oracle's
+cell count stops improving at rank 16 (−0.66). A greedy forward selection on the tune split picks
+d₂₅₆/d₁, cell size and d₁; replacing d₂₅₆ by its 0.99-correlated copy d₃₂/d₁ gives, on test,
+1.16 / 1.24 / 1.29 / 1.39× against 1.16 / 1.23 / 1.30 / 1.38× for all 17 (intervals overlap at every
+target; d₁₆/d₁ instead is equal up to R = 0.9 and 1.33× at 0.99; one ratio alone 1.19–1.25×). A
+ridge model on logs is a power law:
+
+    n = A · (d₃₂/d₁)^a · d₁^b · size^c,     R = 0.9:  a = −4.34, b = −1.25, c = −0.87
+
+(a = −2.61 / −4.34 / −5.36 / −6.72 from R = 0.8 to 0.99). A flatter distance profile gives more
+cells, smoothly rather than explosively as in §3; among equally flat queries, those far from every
+centroid get *fewer* cells, which is the oracle's habit of giving up on hopeless queries; large
+nearby cells also mean fewer cells. Fewer features do not make the rule faster by themselves
+(computing 3 numbers instead of 17 saves microseconds); what matters for time is that rank 32 is
+cheap to obtain (§7).
 
 ## 5. Scan feedback: the stopping rule (Figures 1, 4, 7)
 
@@ -241,6 +266,45 @@ terms (0.46 ms per query for plain Faiss) and showed our preassigned path 1.10×
 Faiss at R = 0.99. None of this reappears in the run above, where the two paths and the re-ranking
 cost the same for every method, so we quote the run above (capped rule 1.05× rather than 1.17×).
 
+**The two learned rules in C++** (`cpp/`, `cpp/run.sh`; Faiss 1.16 C++ library on the same index
+file). To separate the rules from the cost of the Python prototype we reimplemented them inside
+Faiss's own scan loop, using `IndexIVF::get_InvertedListScanner` as `search_preassigned` does: one
+scanner and one result heap per query, kept across all its cells. Checks: our loop at fixed
+nprobe returns the same top-10 as `index.search` for every test query, with the same vector count
+and the same time (1.00×); both rules pick the same number of cells as their Python versions (0–2
+mismatches in 5 000), with the expected recall. Speed vs plain `index.search` at the same recall,
+single thread, 5 000 test queries, median of 5, re-ranking included:
+
+| method | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|
+| fitted rule, 3 features (d₃₂/d₁, d₁, size); asks for the 64 nearest centroids, 256 only for queries predicted to need more | 0.96× | **1.02×** | **1.06×** | **1.12×** |
+| fitted rule, 17 features (needs the 256 nearest for every query) | 0.75× | 0.83× | 0.92× | 1.14× |
+| stopping rule (3-feature formula), asks for 64 centroids first, 256 for queries that get that far | 0.96× | 1.01× | 0.91× | 1.04× |
+| stopping rule, 256 centroids up front | 0.75× | 0.82× | 0.91× | 1.09× |
+| control: the stopping rule's rounds with the rule evaluated but ignored, fixed nprobe | 0.99× | 0.98× | 0.95× | 0.99× |
+
+Run-to-run noise is about ±3%. What it took and what remains:
+
+- **Rounds are cheap once the scan is not restarted** (control row ~0.98×). The rule's check needs
+  the current 10th-best PQ distance; computed naively from the 200-entry heap it cost ~15 µs per
+  query (the heap's array order defeats a front-to-back insertion pass); since the 10th-best can
+  only shrink, collecting the heap entries ≤ the previous value branch-free and selecting among them
+  brings it to ~3 µs.
+- **The centroid search is the remaining cost.** Both rules need more nearest centroids than plain
+  Faiss (26 at R = 0.9): selecting 26 / 64 / 256 of the 4 096 costs 0.018 / 0.025 / 0.060 ms per
+  query. Queries that need the 256 get one extra batched search, which has a large fixed cost per
+  call (~0.14 s, i.e. ~0.28 ms per query for a batch of 500, 0.06 ms for a batch of 3 000; not
+  understood), so asking for fewer centroids first only pays where few queries exceed them.
+- **Scan time falls less than vector count.** At R = 0.9 the fitted rule scans 19% fewer vectors
+  and saves ~10% of scan time: each cell has a fixed setup cost (its PQ lookup table) and the
+  skipped cells are the small ones of easy queries. Re-ranking (0.036 ms) and the centroid search do
+  not shrink at all.
+
+So implemented carefully, the fitted rule's 1.2–1.4× work saving becomes a small but real
+speed-up from R = 0.9 up (2–12%), none at 0.8; the stopping rule's equal or larger work saving does
+not survive as time, because stopping mid-scan forces it to ask for far centroids up front or
+fetch them later.
+
 ## 8. The proposal's predictions
 
 | prediction | outcome |
@@ -249,7 +313,7 @@ cost the same for every method, so we quote the run above (capped rule 1.05× ra
 | The oracle needs several times fewer scanned vectors at recall 0.9 | **Partly.** 2.0× at 0.9 (1.7× at 0.8, 3.9× at 0.99). |
 | The rule gets about half of that: 1.5–2× fewer scanned vectors | **No.** The rule as proposed needs 1.4× *more* at 0.9. With a cap: 1.13×. The best rules we found, a static rule fitted to the oracle and a stopping rule on scan feedback: 1.23× and 1.25×, a third of the oracle's saving. |
 | The saving grows with the recall target | **Yes**, for every method: oracle 1.7× → 3.9×, fitted rule 1.16× → 1.38×, stopping rule 1.17× → 1.34×, capped rule 1.11× → 1.16×. |
-| The saving in time is smaller than in scanned vectors | **Yes.** Capped rule: 1.13× work → 1.05× time; fitted rule: 1.23× work → 0.83× (the 256-centroid quantizer call); stopping rule: 1.25× work → 0.28× time in the Python prototype. |
+| The saving in time is smaller than in scanned vectors | **Yes, much smaller.** Python prototype: capped rule 1.13× work → 1.05× time; fitted rule 1.23× → 0.83×; stopping rule 1.25× → 0.28×. In C++ inside Faiss's scan loop: fitted rule (3 features) 1.24× → 1.02×, stopping rule 1.25× → 1.01× (§7). |
 
 ## 9. Extension: nlist = 1 024 (bigger cells)
 
@@ -323,8 +387,9 @@ not a new model.
   queries at R = 0.99, the stopping rule for fewer.
 - With k = 10, per-query recall moves in steps of 0.1, so per-query targets 0.95 and 0.99 mean
   "all ten" (reported under 1.0 in §2); mean-recall targets are unaffected.
-- The stopping rule's time was measured in Python on top of Faiss's public API; its work saving is
-  exact, its time cost is an artefact of that API, and we did not implement the incremental scan.
+- Time was measured both in Python on top of Faiss's public API and in C++ inside Faiss's scan
+  loop (§7), single-threaded, on one machine, SIFT1M only. The C++ numbers are what the rules can
+  realistically give; a cheaper way to get the far centroids is the remaining lever.
 - Exploration of alternative rules (§4) used the tune split for both choosing and scoring, and
   the min(rule, nprobe) view of §4 chose ε on test; the numbers quoted in §1 and §5 are all
   tune → test.

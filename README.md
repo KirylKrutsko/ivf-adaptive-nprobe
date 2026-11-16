@@ -38,6 +38,22 @@ uv run python experiments/13_transfer.py        # stopping rule across datasets:
 uv run python experiments/14_compact_rule.py    # 3-feature stopping rule and its closed form: d_next/d1 < K (r10/d1)^p c^q
 uv run python experiments/15_stoprule_verify.py   # live check of the compact rule + feature ablation, tuned savings with CIs
 uv run python experiments/16_fitted_rule_tuned.py   # static fitted rule tune->test with CIs, live check and timing
+uv run python experiments/17_fitted_rule_analysis.py  # fitted rule: feature correlations, subsets, greedy selection, 3-feature formula
+```
+
+C++ timing of the two learned rules inside Faiss's scan loop (macOS: `brew install faiss`, 1.16 = the pip version):
+
+```bash
+uv run python cpp/export_inputs.py   # test queries, ground truth, stopping-rule constants -> data/cpp/
+uv run python cpp/export_fitted.py   # fitted-rule models (17 / 11 / 3 features) -> data/cpp/
+./cpp/run.sh                         # stopping rule vs plain Faiss  -> results/cpp_stoprule_bench.csv
+./cpp/run.sh fitted                  # fitted rule vs plain Faiss    -> results/cpp_fitted_bench.csv
+```
+
+Presentation (`presentation/adaptive-nprobe.html`, notes in `presentation/speaker-notes.md`):
+
+```bash
+uv run python presentation/build_data.py && python3 presentation/inject.py   # refresh the deck's numbers from results/
 ```
 
 ## Layout
@@ -46,4 +62,7 @@ uv run python experiments/16_fitted_rule_tuned.py   # static fitted rule tune->t
 - `experiments/` — numbered experiment scripts, write to `results/`
 - `configs/` — dataset/index/grid settings
 - `tests/` — equivalence, scanned-vector-count and oracle tests
+- `cpp/` — C++ benchmark of the stopping and fitted rules on Faiss's scan code, and its input exporters
+- `report/` — results section draft (`results.md`) and presenter's guide (`guide_ru.md`)
+- `presentation/` — slides (single self-contained HTML), speaker notes, data builder
 - `data/`, `results/` — git-ignored
