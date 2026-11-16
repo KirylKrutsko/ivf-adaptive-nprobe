@@ -39,6 +39,7 @@ uv run python experiments/14_compact_rule.py    # 3-feature stopping rule and it
 uv run python experiments/15_stoprule_verify.py   # live check of the compact rule + feature ablation, tuned savings with CIs
 uv run python experiments/16_fitted_rule_tuned.py   # static fitted rule tune->test with CIs, live check and timing
 uv run python experiments/17_fitted_rule_analysis.py  # fitted rule: feature correlations, subsets, greedy selection, 3-feature formula
+uv run python experiments/18_extra_features.py        # data-aware extra features (cell radius, local density, ...) for both rules: no gain
 ```
 
 C++ timing of the two learned rules inside Faiss's scan loop (macOS: `brew install faiss`, 1.16 = the pip version):

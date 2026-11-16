@@ -110,7 +110,8 @@ the other half of the queries.
   - how far the query is from everything, d₁,
   - how big the nearby cells are,
   - and the old count itself.
-- Step 2, question to the audience: many signals, each a little informative, interacting. Which matter, and how to combine them? Let them answer, then: we have the oracle's answer for every training query, so let a model learn the mapping (ML, yay).
+- Step 1, with the signals: the question to the audience: many signals, each a little informative, interacting. Which matter, and how to combine them? Let them answer.
+- Step 2, "Let's do ML!": we have the oracle's answer for every training query, so let a model learn the mapping.
 
 ## 18. Learn how many cells each query needs [1:05]
 - Train lane, on the tune queries: 17 features from the centroid distances (15 profile ratios, d₁, size of the 8 nearest cells) → label: the number of cells the oracle gives this query (the Lagrangian oracle at the target recall, so it already includes "give up on hopeless queries") → ridge regression on log(cells) → one scale factor γ, the smallest that reaches the target recall on tune.
@@ -134,6 +135,7 @@ the other half of the queries.
 - Refit with only d₃₂/d₁, d₁ and cell size, same protocol: 1.16 / 1.24 / 1.29 / 1.39× against 1.16 / 1.23 / 1.30 / 1.38× with all 17. Same within the CIs at every target.
 - Why rank 32 and not 256: the greedy search on tune picked d₂₅₆/d₁, but it is a 0.99-correlated copy of d₃₂/d₁, and rank 32 is much cheaper to get (matters later for time).
 - Background if asked: d₁₆/d₁ instead of d₃₂ is equal up to 0.9 and loses at 0.99 (1.33×); a single ratio alone gives ~1.19–1.25×.
+- Bottom line of the slide: we also tried giving the model information about the data itself, all free at search time (per-cell statistics precomputed once): radius of the nearest cell and d₁ relative to it, the typical 10th-neighbour distance inside the cell (local density), the share of the cell's points that sit near its border, how badly PQ codes represent the query, the distance to the boundary of the 2nd cell. Each one alone, all together, and a greedy search over all 25: no change beyond noise (e.g. 1.24× → 1.24× at 0.9). They correlate with difficulty (~0.47), but say nothing the profile and d₁ do not already say. So what is visible before scanning seems exhausted by the three features.
 
 ## 22. Three features, one formula [1:05]
 - Ridge on logs = a power law: n = A · (d₃₂/d₁)^a · d₁^b · size^c.
@@ -155,7 +157,8 @@ the other half of the queries.
 ## 25. Again: three features, one formula [1:05]
 - Same analysis as for the fitted rule: three features carry it: the next centroid's distance, the current 10th-best, the cells scanned.
 - Its decision boundary: keep scanning while d_next/d₁ < K·(r10/d₁)^p·c^q. Step 1: the left side is exactly the proposal's rule, so this is the ratio rule with an ε that adapts: grows while the best candidates found are still far, shrinks slowly with cells scanned (a soft cap). The constant ε was the problem.
-- Step 2: 3 features = 26 up to 0.95 on both datasets (at 0.99 the full model is 4–6% better). Constants at 0.9: K = 1.53, p = 0.64, q = −0.085 on SIFT; K = 1.38, p = 0.58, q = −0.067 on Deep1M.
+- Step 2: 3 features = 26 up to 0.95 on both datasets (at 0.99 the full model is 4–6% better).
+- Also step 2: extra mid-search signals (cells scanned since the last cell that contributed a top-10 candidate, the 10th-best relative to the local neighbour density, how spread the candidate pool is) plus the data features of slide 21: ±2% and not consistent (better at 0.8 / 0.9 / 0.99, worse at 0.95; added to the 3-feature formula they even hurt slightly). Constants at 0.9: K = 1.53, p = 0.64, q = −0.085 on SIFT; K = 1.38, p = 0.58, q = −0.067 on Deep1M.
 
 ## 26. Second dataset: Deep1M [1:00]
 - Deep1M: 96-d deep image embeddings, same index type and pipeline, refitted on its own tune half.
@@ -165,7 +168,7 @@ the other half of the queries.
 - Step: transfer. Fit on SIFT, use on Deep1M without refitting, threshold for recall 0.9: the 3-feature formula reaches 0.93, the 26-feature model stops far too early (0.68). Simple rule = robust rule.
 
 ## 27. Same average work: who gets a bad answer? [0:45]
-- Give every method the work of fixed `nprobe` 26 (recall ≈ 0.9) and count the queries that find at most 5 of their 10 neighbours.
+- Give every method the work of fixed `nprobe` 26 (recall ≈ 0.9; say this, it is no longer on the slide) and count the queries that find at most 5 of their 10 neighbours.
 - Fixed 2.5%, ratio rule 5.6% (gives cells to the wrong queries), cap 1.6%; step 1: fitted rule 0.8%, stopping rule 0.3%, oracle 0%.
 - Same cost, far fewer bad answers: a second way to sell both learned rules.
 
@@ -195,7 +198,8 @@ the other half of the queries.
 
 ## 32. Limitations and next steps [0:45]
 - Limitations: two dense image-descriptor datasets, one index family; the time gain is small (≤ 1.12×, none at recall 0.8, measured on SIFT1M only); the two rules tie only on SIFT1M, on Deep1M the stopping rule saves more work, but we could not turn that into time; every method capped at 256 cells.
-- Next: a cheaper way to get far centroids (the remaining time cost); data-aware features for the fitted rule (cell radius, local density around the query: cheap per-cell lookups); very different data (GloVe / text embeddings); a stopping rule that does not interrupt the scan (e.g. decide once after a few cells); the same question for other indexes, e.g. HNSW's per-query search budget (ef).
+- Next: a cheaper way to get far centroids (the remaining time cost, including the unexplained fixed cost of the batched 256-centroid search); other, more diverse datasets (text embeddings, GloVe with angular distance, strong hubness); parallel and GPU evaluation (all our timing is single-threaded CPU; with per-query budgets threads finish at different times, and GPUs prefer equal work per query); billion-scale indexes (Deep1B / SIFT1B), where scanning dominates even more and the work saving should turn into time more fully.
+- Already tried, so not listed as next steps: data-aware features (cell radius, local density, border share, PQ error) and extra mid-search signals: no gain (slides 21 and 25).
 
 ## 33. Recap [0:30]
 - Measure: an oracle tells you how much a per-query budget can give (2× at 0.9).

@@ -21,6 +21,7 @@ Status board (updated with every entry):
 | Timing in C++ (stopping + fitted rule) | done (`cpp/`, SIFT1M): fitted rule, 3 features 0.96 / 1.02 / 1.06 / 1.12×; stopping rule 0.96 / 1.01 / 0.91 / 1.04× |
 | Fitted rule feature analysis | done (`17_fitted_rule_analysis.py`): 3 features (d32/d1, d1, size) = 17; closed form |
 | Presentation | `presentation/` (33 slides + speaker notes), fitted and stopping rule discussed together |
+| Extra data-aware features for both rules | tried (`18_extra_features.py`, SIFT1M): no gain for the fitted rule, ±2% not consistent for the stopping rule |
 | Plots | 1, 1b, 2, 3, 4, 4b, 5, 6, 7 (`results/plots/`), structure B |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
@@ -29,6 +30,42 @@ Status board (updated with every entry):
 | Fitted static rule, tune → test + live + timing | done on all three configs (`16_fitted_rule_tuned.py`): equal to the stopping rule on SIFT1M/4096 (ahead at 0.99), behind it on Deep1M and nlist 1024 |
 | Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 (late night) — extra data-aware features for both learned rules (Kiryl)
+
+`experiments/18_extra_features.py` (1.5 min; per-cell statistics cached in `results/18_cell_stats.npz`).
+Both rules only see distances to centroids (and the scan's progress), so we tried free features
+describing the data around the query. Static, per cell precomputed once from the base: radius of the
+nearest cell (median member distance) and d1/radius; local neighbour radius (median 10th-neighbour
+distance of 10 sampled members per cell) and d1/that, its mean over the 8 nearest cells; border share
+(members with d2/d1 < 1.05); per query: PQ reconstruction error of the residual / d1, distance to the
+bisector of cells 1 and 2 / d1. Dynamic (stopping rule): cells since the last cell that contributed a
+current PQ top-10 candidate; r10 / local neighbour radius; worst heap distance / r10. Protocols of 17
+and 15, tuned saving on test with bootstrap CIs, work only.
+
+| rule | features | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|---|
+| fitted | 3 base (d32/d1, d1, size) | 1.163 | 1.237 | 1.292 | 1.392 |
+| fitted | 3 base + 8 new | 1.162 | 1.236 | 1.306 | 1.395 |
+| fitted | 17 base + 8 new | 1.160 | 1.250 | 1.298 | 1.390 |
+| stopping | 26 base | 1.169 | 1.247 | 1.314 | 1.340 |
+| stopping | 26 + 3 dynamic | 1.185 | 1.269 | 1.281 | 1.374 |
+| stopping | 3 base + 3 dynamic | 1.150 | 1.226 | 1.292 | 1.306 |
+
+CIs about ±0.01–0.02. Fitted rule: any single new feature added to the 3 changes nothing beyond
+±0.002 up to 0.95; greedy selection over all 25 on tune takes the same three first and then no new
+feature lowers tune work (5883 → 5883). The new features correlate with the oracle's cells (+0.47
+for radius, local radius, border share) but carry nothing the profile and d1 do not. Stopping rule:
++2% at 0.8 / 0.9 / 0.99, −2.5% at 0.95 for the full model; added to the 3-feature formula they hurt
+slightly (the model predicts "would the oracle continue", which is not the work objective).
+
+**Reading.** On SIFT1M what is visible at search time seems exhausted by the 3-feature versions; the
+rest of a query's difficulty is where its true neighbours sit. Not pursued further; time benchmarks
+not run for these variants. Untested: a per-cell hardness prior (needs ground truth for
+pseudo-queries). Presentation: one line on slides 21 and 25 ("also tried other features: no
+improvement"), details in the speaker notes.
 
 ---
 

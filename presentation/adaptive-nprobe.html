@@ -323,9 +323,9 @@ svg{display:block;overflow:visible}
   <div class="split">
     <svg id="v13" viewBox="0 0 600 600" width="540" height="540"></svg>
     <div class="beats">
-      <p data-s="1"><b>b</b> = distance to the cell's boundary<br><span class="small">nothing in the cell is closer than b</span></p>
+      <p data-s="1"><b>b</b> = distance to the cell's boundary</p>
       <p data-s="2"><b>Two-stage:</b> scan a few cells, take the 10th-best distance <b>r</b>, then scan cells with <b>b &lt; r</b></p>
-      <p data-s="2" class="small">+ variants: gap d_j − d₁ ≤ δ, order cells by b, stop when b &gt; α·r</p>
+      <p data-s="2" class="small">+ variants:<br>gap d_j − d₁ ≤ δ<br>order cells by b<br>stop when b &gt; α·r</p>
     </div>
   </div>
 </section>
@@ -353,7 +353,6 @@ svg{display:block;overflow:visible}
   <p class="kicker">Idea 3 · a quick fix</p>
   <h2>Cap it: never more than C cells</h2>
   <svg id="v16" viewBox="0 0 1136 430" width="1136" height="430"></svg>
-  <p class="small" data-s="1" style="margin-top:6px">ε and C tuned together on tune: C = 16 / 32 / 48 / 128, about the nprobe you would use anyway</p>
 </section>
 
 <!-- 17 LEARN: QUESTION -->
@@ -366,8 +365,8 @@ svg{display:block;overflow:visible}
     <div><svg viewBox="0 0 44 44"><rect class="ic" x="6" y="18" width="9" height="16" rx="2"/><rect class="icq" x="18" y="10" width="9" height="24" rx="2"/><rect class="ic" x="30" y="14" width="9" height="20" rx="2"/></svg>how big the nearby cells are</div>
     <div><svg viewBox="0 0 44 44"><circle class="ic" cx="22" cy="22" r="14" style="stroke-dasharray:4 4"/><circle cx="22" cy="22" r="3" style="fill:var(--q)"/></svg>how many centroids within (1 + ε)·d₁: the old rule</div>
   </div>
-  <p class="bigq" data-s="2">Many signals. <span>Which matter, and how to combine them?</span></p>
-  <p class="small" data-s="2" style="margin-top:14px">→ let a model learn it from the oracle</p>
+  <p class="bigq" data-s="1">Many signals. <span>Which matter, and how to combine them?</span></p>
+  <p class="bigq" data-s="2" style="margin-top:26px;color:var(--q)">Let's do ML!</p>
 </section>
 
 <!-- 18 LEARN: HOW -->
@@ -376,13 +375,13 @@ svg{display:block;overflow:visible}
   <div style="margin-top:56px">
     <div class="lane" data-s="0">
       <div class="lname">Train<br><span class="tiny">tune queries</span></div>
-      <div class="box">17 features<span class="s">from the centroid distances</span></div>
+      <div class="box">17 features</div>
       <div class="arr"></div>
-      <div class="box q">label<span class="s">cells the oracle gives this query</span></div>
+      <div class="box q">oracle's cell count</div>
       <div class="arr"></div>
-      <div class="box">ridge regression<span class="s">on log(cells)</span></div>
+      <div class="box">ridge regression</div>
       <div class="arr"></div>
-      <div class="box">scale γ<span class="s">smallest reaching R on tune</span></div>
+      <div class="box">scale γ</div>
     </div>
     <div class="lane" data-s="1">
       <div class="lname">Search<br><span class="tiny">test queries</span></div>
@@ -390,12 +389,12 @@ svg{display:block;overflow:visible}
       <div class="arr"></div>
       <div class="box q">predict n cells</div>
       <div class="arr"></div>
-      <div class="box">scan n cells<span class="s">in one go</span></div>
+      <div class="box">scan n cells in one go</div>
       <div class="arr"></div>
       <div class="box">re-rank 200</div>
     </div>
   </div>
-  <p class="small" data-s="2" style="margin-top:30px">One model per recall target · γ chosen on tune by cross-fitting · nothing decided during the scan</p>
+  <ul class="dots" data-s="2" style="margin-top:30px"><li>One model per recall target</li><li>γ chosen on tune by cross-fitting</li></ul>
 </section>
 
 <!-- 19 FITTED RESULT -->
@@ -411,8 +410,8 @@ svg{display:block;overflow:visible}
   <div class="split" style="grid-template-columns:760px 1fr">
     <svg id="v20" viewBox="0 0 760 500" width="760" height="500"></svg>
     <div class="beats">
-      <p data-s="1"><b>Big weights cancel</b><br><span class="small">neighbouring ratios are near copies: correlation ≥ 0.99</span></p>
-      <p data-s="2"><b>Three features carry it</b><br><span class="small">how flat the profile is · d₁ · cell size</span></p>
+      <p data-s="1"><b>Big weights cancel</b><br><span class="small">correlation ≥ 0.99</span></p>
+      <p data-s="2"><b>Three features carry it</b></p>
     </div>
   </div>
 </section>
@@ -420,7 +419,8 @@ svg{display:block;overflow:visible}
 <!-- 21 FITTED THREE -->
 <section class="slide" id="s21" data-steps="2" data-sec="Fitted rule">
   <h2>Keep only three?</h2>
-  <svg id="v21" viewBox="0 0 1136 470" width="1136" height="470"></svg>
+  <svg id="v21" viewBox="0 0 1136 440" width="1136" height="440"></svg>
+  <p class="small" data-s="1" style="margin-top:6px">Also tried other features: <b style="color:var(--ink)">no improvement</b></p>
 </section>
 
 <!-- 22 FITTED FORMULA -->
@@ -461,6 +461,7 @@ svg{display:block;overflow:visible}
   <div class="fxl"><span><b style="color:var(--c0)">d_next</b> next centroid</span><span><b style="color:var(--q)">r10</b> current 10th-best</span><span><b style="color:var(--c2)">c</b> cells scanned</span></div>
   <div class="eq2" data-s="1">= the proposal's rule, with <b>1 + ε = K · (r10/d₁)<sup>p</sup> · c<sup>q</sup></b> instead of a constant</div>
   <div class="eq2" data-s="2" style="margin-top:22px;font-size:22px">3 features = 26 up to recall 0.95 · on SIFT1M and Deep1M</div>
+  <div class="eq2" data-s="2" style="margin-top:14px;font-size:19px">tried other signals: no gain</div>
 </section>
 
 <!-- 26 DEEP1M -->
@@ -474,7 +475,7 @@ svg{display:block;overflow:visible}
 <!-- 27 TAIL -->
 <section class="slide" id="s27" data-steps="2" data-sec="Stopping rule">
   <h2>Same average work: who gets a bad answer?</h2>
-  <p class="small" style="margin:-8px 0 26px">share of queries that find at most 5 of their 10 true neighbours, every method at the work of fixed nprobe 26 (recall ≈ 0.9)</p>
+  <p class="small" style="margin:-8px 0 26px">share of queries with recall@10 ≤ 5/10</p>
   <svg id="v27" viewBox="0 0 1136 400" width="1136" height="400"></svg>
 </section>
 
@@ -535,9 +536,9 @@ svg{display:block;overflow:visible}
     </ul></div>
     <div data-s="1"><h3>Next</h3><ul class="dots q">
       <li>Cheaper centroid search for far centroids</li>
-      <li>Data-aware features: cell radius, local density</li>
-      <li>Stopping rule without restarting the scan</li>
-      <li>Other indexes: HNSW search budget (ef)</li>
+      <li>Other, more diverse datasets</li>
+      <li>Parallel and GPU evaluation</li>
+      <li>Billion-scale indexes (Deep1B, SIFT1B)</li>
     </ul></div>
   </div>
 </section>
@@ -819,7 +820,7 @@ $('v19').innerHTML=scoreboard({methods:[mm('ratio',{faded:true}),mm('cap',{faded
  const st=document.createElement('style');st.textContent=`#s20.st1 .w-big{fill:var(--c5)} #s20.st2 .w-big{fill:var(--ink)} #s20.st2 .w-key{fill:var(--q);font-weight:700}`;document.head.appendChild(st);})();
 
 // 21 fitted: 17 features vs 3
-$('v21').innerHTML=scoreboard({methods:[{label:'17 features',color:COL.fitted,vals:DATA.fitted17},{label:'3 features: d₃₂/d₁, d₁, size',color:COL.compact,vals:DATA.fitted3,s:1}],oracle:OR,bw:60});
+$('v21').innerHTML=scoreboard({h:440,methods:[{label:'17 features',color:COL.fitted,vals:DATA.fitted17},{label:'3 features: d₃₂/d₁, d₁, size',color:COL.compact,vals:DATA.fitted3,s:1}],oracle:OR,bw:60});
 
 // 22 fitted formula constants
 (()=>{const F=DATA.fitted_formula;$('fconsts').innerHTML=`<tr><th>recall target</th><th>a</th><th>b</th><th>c</th></tr>`+
