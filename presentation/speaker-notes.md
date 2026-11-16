@@ -1,7 +1,7 @@
 # Adaptive nprobe: speaker notes
 
 Deck: `presentation/adaptive-nprobe.html` (→ / space / click = next step, ← = back, `f` = fullscreen).
-Target length: about 30 minutes; the bracketed timings per slide add up to that. Leave the audience questions on slides 3 and 17 short (10–20 s each); the twist is slide 28.
+Target length: about 31 minutes; the bracketed timings per slide add up to that. Leave the audience questions on slides 3 and 17 short (10–20 s each); the twist is slide 29.
 Numbers are SIFT1M test queries unless a slide says otherwise; every parameter was tuned on
 the other half of the queries.
 
@@ -152,7 +152,7 @@ the other half of the queries.
 
 ## 24. Idea 5: result [0:55]
 - 1.17 / 1.25 / 1.31 / 1.34×: the same as the fitted rule (1.16 / 1.23 / 1.30 / 1.38) within the CIs up to 0.95, slightly below it at 0.99.
-- So on SIFT1M watching the scan does not see more than a well-fitted look at the centroid distances. On Deep1M it does (slide 26).
+- So on SIFT1M watching the scan does not see more than a well-fitted look at the centroid distances. On Deep1M it does (slide 27).
 
 ## 25. Again: three features, one formula [1:05]
 - Same analysis as for the fitted rule: three features carry it: the next centroid's distance, the current 10th-best, the cells scanned.
@@ -160,35 +160,42 @@ the other half of the queries.
 - Step 2: 3 features = 26 up to 0.95 on both datasets (at 0.99 the full model is 4–6% better).
 - Also step 2: extra mid-search signals (cells scanned since the last cell that contributed a top-10 candidate, the 10th-best relative to the local neighbour density, how spread the candidate pool is) plus the data features of slide 21: ±2% and not consistent (better at 0.8 / 0.9 / 0.99, worse at 0.95; added to the 3-feature formula they even hurt slightly). Constants at 0.9: K = 1.53, p = 0.64, q = −0.085 on SIFT; K = 1.38, p = 0.58, q = −0.067 on Deep1M.
 
-## 26. Second dataset: Deep1M [1:00]
+## 26. Watch it decide [1:00]
+- Two real test queries, SIFT1M, the 3-feature formula at recall 0.9. Blue: distance to the next cell's centroid relative to the nearest (d_next/d₁), rising as the search moves outwards. Pink: the formula's threshold K·(r10/d₁)^p·c^q, falling as more cells are scanned and the current 10th-best candidate gets closer.
+- Step 1 adds the blue line; step 2 shows where they cross: that is where the search stops.
+  - Easy query: the two lines cross after 4 cells; the oracle says 3 were needed; recall 1.0.
+  - Hard query: the next centroids stay almost as close as the nearest, so the blue line stays low and the search keeps going until 32 cells; oracle 27; recall 1.0.
+- Same rule, very different budgets: exactly what the constant ε could not do.
+
+## 27. Second dataset: Deep1M [1:00]
 - Deep1M: 96-d deep image embeddings, same index type and pipeline, refitted on its own tune half.
 - Same ordering for the simple rules: ratio rule below the line, cap slightly above.
 - Here the two learned rules separate: stopping rule 1.24 / 1.26 / 1.36 / 1.65×, fitted rule 1.20 / 1.20 / 1.32 / 1.52× (CIs do not overlap). Deep has a heavier tail of hard queries (the oracle could save 5.2× at 0.99), and that is where watching the scan pays: for the hardest queries the centroid distances alone cannot tell how far to go.
 - (3-feature stopping formula on Deep: 1.24 / 1.26 / 1.36 / 1.55×. SIFT with nlist = 1024: stopping rule ahead at 0.8–0.9, equal above.)
 - Step: transfer. Fit on SIFT, use on Deep1M without refitting, threshold for recall 0.9: the 3-feature formula reaches 0.93, the 26-feature model stops far too early (0.68). Simple rule = robust rule.
 
-## 27. Same average work: who gets a bad answer? [0:45]
+## 28. Same average work: who gets a bad answer? [0:45]
 - Give every method the work of fixed `nprobe` 26 (recall ≈ 0.9; say this, it is no longer on the slide) and count the queries that find at most 5 of their 10 neighbours.
 - Fixed 2.5%, ratio rule 5.6% (gives cells to the wrong queries), cap 1.6%; step 1: fitted rule 0.8%, stopping rule 0.3%, oracle 0%.
 - Same cost, far fewer bad answers: a second way to sell both learned rules.
 
-## 28. 1.25× less work, so 1.25× faster? [0:55]  ← the twist
+## 29. 1.25× less work, so 1.25× faster? [0:55]  ← the twist
 - So far, so good: everybody happy? Not quite. We measured wall-clock time (step 1): single thread, all test queries, Python on top of Faiss, against plain Faiss at the same recall.
 - Fitted rule 0.76 / 0.83 / 0.93 / 1.15×: slower except at 0.99. Stopping rule 0.30 / 0.28 / 0.27 / 0.33×: three to four times *slower*.
 
-## 29. Where the time goes [1:05]
+## 30. Where the time goes [1:05]
 - Time per query at recall 0.9, split by stage. Plain Faiss: 0.14 ms, most of it scanning; centroid search 0.009, re-ranking 0.039.
 - Step 1, fitted rule: scanning is cheaper (0.084 vs 0.094), but its features need the 256 nearest centroids, and selecting 256 of 4096 costs 0.047 ms instead of 0.009: more than the scan saves.
 - Step 2, stopping rule: each round is a separate Faiss call that sets up its result heaps and output arrays from scratch and crosses Python ↔ C++. The grey control: the very same 26 cells scanned in 26 rounds instead of one call cost 0.49 ms instead of 0.09. The rule's own logic is only 0.06 ms.
 - So both problems are implementation, not the rules. Next: fix the implementation.
 
-## 30. Rewritten by hand in C++ [1:15]
+## 31. Rewritten by hand in C++ [1:15]
 - We reimplemented both rules in C++ on Faiss's own scan code (`InvertedListScanner`, what `index.search` uses inside): one heap per query kept across all cells; the fitted rule (3 features) asks for only 64 nearest centroids and fetches 256 only for queries predicted to need more; the stopping rule checks its formula between rounds without restarting anything. Checked: same cells and recall as Python; our loop at fixed `nprobe` reproduces Faiss exactly.
 - Step 1: fitted rule 0.96 / 1.02 / 1.06 / 1.12×: a small but real gain from recall 0.9 up, none at 0.8. Stopping rule 0.96 / 1.01 / 0.91 / 1.04×: about break-even.
 - Why not 1.2–1.3×: re-ranking and the centroid search do not shrink with fewer cells (a third of the time); the cells a rule skips are the small, cheap ones of easy queries (19% fewer vectors → ~10% less scan time); and both rules need more nearest centroids than plain Faiss asks for. The stopping rule pays on top for interrupting the scan: checking between rounds still costs about what its extra saving would bring.
 - Conclusion: the stopping rule is the most promising in theory but hard to cash in, because of its structure (stop mid-scan); the fitted rule decides once and scans in one go, so its saving survives as time.
 
-## 31. At a glance [0:45]
+## 32. At a glance [0:45]
 - Recall 0.9, everything on one axis: the proposal's rule below 1, geometry at 1, cap 1.13×, both learned rules ~1.24×, the oracle at 2×.
 - Takeaways (step):
   1. A per-query `nprobe` can save up to 2× at recall 0.9 (more at higher recall).
@@ -196,12 +203,12 @@ the other half of the queries.
   3. Only the fitted rule turns it into time: up to 1.12× faster in C++.
 - Proposal check: "most queries need 1–3 cells": no; "oracle saves several ×": partly (2×); "rule gets 1.5–2×": no (1.24× for the best); "saving grows with the target": yes; "time saving smaller than work saving": yes, much smaller.
 
-## 32. Limitations and next steps [0:45]
+## 33. Limitations and next steps [0:45]
 - Limitations: two dense image-descriptor datasets, one index family; the time gain is small (≤ 1.12×, none at recall 0.8, measured on SIFT1M only); the two rules tie only on SIFT1M, on Deep1M the stopping rule saves more work, but we could not turn that into time; every method capped at 256 cells.
 - Next: a cheaper way to get far centroids (the remaining time cost, including the unexplained fixed cost of the batched 256-centroid search); other, more diverse datasets (text embeddings, GloVe with angular distance, strong hubness); parallel and GPU evaluation (all our timing is single-threaded CPU; with per-query budgets threads finish at different times, and GPUs prefer equal work per query); billion-scale indexes (Deep1B / SIFT1B), where scanning dominates even more and the work saving should turn into time more fully.
 - Already tried, so not listed as next steps: data-aware features (cell radius, local density, border share, PQ error) and extra mid-search signals: no gain (slides 21 and 25).
 
-## 33. Recap [0:30]
+## 34. Recap [0:30]
 - Measure: an oracle tells you how much a per-query budget can give (2× at 0.9).
 - Diagnose: the simple ratio rule fails because ε is constant; it ranks right but floods the hard queries.
 - Learn: two rules learned from the oracle save 1.16–1.38× work, each reducing to three features; the fitted rule, which decides before scanning, is the one that also saves time (up to 1.12× in C++).

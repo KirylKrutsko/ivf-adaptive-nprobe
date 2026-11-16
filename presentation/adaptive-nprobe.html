@@ -464,6 +464,12 @@ svg{display:block;overflow:visible}
   <div class="eq2" data-s="2" style="margin-top:14px;font-size:19px">tried other signals: no gain</div>
 </section>
 
+<!-- 25b TRACES -->
+<section class="slide" id="s25t" data-steps="3" data-sec="Stopping rule">
+  <h2>Watch it decide</h2>
+  <svg id="v25t" viewBox="0 0 1136 480" width="1136" height="480"></svg>
+</section>
+
 <!-- 26 DEEP1M -->
 <section class="slide" id="s26" data-steps="2" data-sec="Stopping rule">
   <p class="kicker">Second dataset · Deep1M</p>
@@ -828,6 +834,17 @@ $('v21').innerHTML=scoreboard({h:440,methods:[{label:'17 features',color:COL.fit
 
 // 24 stopping rule result
 $('v24').innerHTML=scoreboard({methods:[mm('ratio',{faded:true}),mm('cap',{faded:true}),mm('fitted',{faded:true}),mm('stop',{s:1})],oracle:OR});
+
+// 25b traces: d_next/d1 rises, the formula's threshold falls; the search stops where they cross
+(()=>{const Tr=DATA.traces;let s='';const panel=(tr,x0,title)=>{const rows=tr.rows;const xmax=Math.max(8,rows[rows.length-1][0]);
+  const o={w:1136,h:440,m:{l:x0+70,r:1136-(x0+540),t:70,b:60},x:{min:1,max:xmax,log:true,ticks:[1,2,4,8,16,32].filter(t=>t<=xmax),label:'cells scanned'},y:{min:1,max:1.8,ticks:[1,1.2,1.4,1.6,1.8],fmt:v=>v.toFixed(1)}};
+  const pts1=rows.map(r=>[r[0],r[1]]),pts2=rows.map(r=>[r[0],r[2]]);
+  let g=lineChart(Object.assign(o,{series:[{pts:pts2,color:'var(--q)',width:3.5,label:'K·(r10/d₁)^p·c^q',lab:[1.05,rows[0][2]+0.06]},{pts:pts1,color:'var(--c0)',width:3.5,label:'d_next / d₁',lab:[1.05,rows[0][1]<1.12?rows[0][1]+0.05:rows[0][1]-0.06],s:1}],
+   post:(X,Y)=>{const xs=X(tr.stop),right=xs>x0+380,ax=right?xs-10:xs+10,an=right?'end':'start';
+    return `<g data-s="2"><line x1="${f1(xs)}" x2="${f1(xs)}" y1="70" y2="${440-60}" style="stroke:var(--ink);stroke-width:2;stroke-dasharray:6 5"/><text class="lab" x="${f1(ax)}" y="${right?100:440-60-38}" text-anchor="${an}" style="font-weight:700">stop at ${tr.stop}</text><text class="lab sm mute" x="${f1(ax)}" y="${right?124:440-60-14}" text-anchor="${an}">oracle: ${tr.need} · recall ${rows.find(r=>r[0]>=tr.stop)[4].toFixed(1)}</text></g>`}}));
+  return `<text class="lab" x="${x0+70}" y="30" style="font-weight:600">${title}</text>`+g};
+ s+=panel(Tr.easy,0,'easy query')+panel(Tr.hard,596,'hard query');
+ $('v25t').innerHTML=s;})();
 
 // 26 Deep1M
 (()=>{const D2=DATA.score_deep;
