@@ -127,8 +127,8 @@ nprobe by more than ~1.1–1.2× at R ≤ 0.95. The boundary idea fails for a ge
 bound is valid but in 128 dimensions it is only 20% of the true distance to the cell's nearest
 vector in the median, while the 10th neighbour is as far away as the nearest centroid (226 vs 213),
 so "boundary closer than r" holds for almost every cell and prunes nothing. Of everything built
-on the quantizer output, the fitted rule is the best, and it is as good as the stopping rule of §5
-(SIFT1M; the fitted rule was not run tune → test on Deep1M). The catch is time: its features need
+on the quantizer output, the fitted rule is the best, and on SIFT1M it is as good as the stopping
+rule of §5; on Deep1M and with nlist = 1 024 it is behind it (§5). The catch is time: its features need
 the 256 nearest centroids, a quantizer call five times as expensive as for 26, which eats the
 saving below R = 0.99 (§7).
 
@@ -159,10 +159,13 @@ Against the static rule of §4 fitted and tuned the same way (one model per targ
 rule is **not** better on SIFT1M: 1.17 / 1.25 / 1.31 / 1.34× against 1.16 / 1.23 / 1.30 / 1.38×,
 equal within the confidence intervals up to R = 0.95 and below it at R = 0.99. An earlier
 comparison against a single static model fitted at R = 0.9 had suggested a gain at R = 0.99
-(1.45× vs 1.33×, curve-based); it disappears once the static rule is fitted per target. Scan
-feedback therefore reaches the same saving by a different route, with an interpretable rule
-(below), but does not see more than the centroid distances do. Whether this also holds on Deep1M,
-where the stopping rule saves 1.65× at R = 0.99, was not checked.
+(1.45× vs 1.33×, curve-based); it disappears once the static rule is fitted per target. On the other two configurations the picture tilts: on Deep1M the stopping rule is ahead at every
+target with non-overlapping intervals (1.24 / 1.26 / 1.36 / 1.65× against 1.20 / 1.20 / 1.32 /
+1.52×), and with nlist = 1 024 ahead at R ≤ 0.9 and equal above (1.25 / 1.22 / 1.31 / 1.40× against
+1.19 / 1.18 / 1.28 / 1.39×). Scan feedback therefore adds something where the tail of hard queries
+is longer, costs nothing elsewhere except SIFT1M at R = 0.99, and comes with an interpretable rule
+(below); in 11 of the 12 configuration × target cells it is at least as good as the best static
+rule.
 
 **The rule in closed form.** Three of the 26 features carry almost all of the effect: refitting the
 model with only d_next/d_1, r10/d_1 and c gives the same savings within ±0.02 at R ≤ 0.95 on both
@@ -330,5 +333,5 @@ not a new model.
 - Times (§7) are single-threaded runs on one laptop; absolute milliseconds differ about 3× between
   our two machines (0.46 vs 0.14 ms per query for plain Faiss at nprobe 26), so only ratios
   measured within one run are compared. Timing was not rerun for nlist = 1 024 or Deep1M.
-- The fitted static rule was evaluated tune → test (§1, §4) on SIFT1M only; on Deep1M only the
-  stopping rule and the capped rule were.
+- The fitted static rule was evaluated tune → test on all three configurations (§5), but the
+  tables of §9 and §10 do not include it; see `WORKLOG.md` for its numbers there.

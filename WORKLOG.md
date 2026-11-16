@@ -23,9 +23,39 @@ Status board (updated with every entry):
 | Alternative rules (bounds, two-stage, patience, fitted) | explored on tune (`results/07_*`), fitted rule tune→test (`results/08_*`) |
 | Tail recall at equal work | done (`results/09_*`) |
 | Scan-feedback stopping rule (fitted) | per-cell exact version (`results/10_*`); **implementable round version with CIs** (`stoprule.py`, `results/11_*`): 1.17 / 1.25 / 1.31 / 1.34× |
-| Fitted static rule, tune → test + live + timing | done (`16_fitted_rule_tuned.py`, SIFT1M): 1.16 / 1.23 / 1.30 / 1.38×, **equal to the stopping rule** |
+| Fitted static rule, tune → test + live + timing | done on all three configs (`16_fitted_rule_tuned.py`): equal to the stopping rule on SIFT1M/4096 (ahead at 0.99), behind it on Deep1M and nlist 1024 |
 | Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-16 — fitted static rule tune → test on Deep1M and nlist 1024 (Kiryl's request)
+
+`16_fitted_rule_tuned.py configs/deep1m.yaml` and `configs/sift1m_nlist1024.yaml` (1–2 min each).
+Tuned saving vs fixed nprobe [95% CI], static fitted rule vs stopping rule (11), same protocol:
+
+| config | rule | R = 0.8 | R = 0.9 | R = 0.95 | R = 0.99 |
+|---|---|---|---|---|---|
+| SIFT1M, nlist 4096 | static fitted | 1.16 [1.15, 1.17] | 1.23 [1.22, 1.25] | 1.30 [1.28, 1.32] | **1.38** [1.36, 1.40] |
+| | stopping rule | 1.17 [1.16, 1.18] | 1.25 [1.23, 1.27] | 1.31 [1.29, 1.34] | 1.34 [1.32, 1.37] |
+| Deep1M | static fitted | 1.20 [1.19, 1.21] | 1.20 [1.19, 1.21] | 1.32 [1.30, 1.33] | 1.52 [1.49, 1.54] |
+| | stopping rule | **1.24** [1.22, 1.25] | **1.26** [1.24, 1.28] | **1.36** [1.33, 1.38] | **1.65** [1.61, 1.69] |
+| SIFT1M, nlist 1024 | static fitted | 1.19 [1.18, 1.20] | 1.18 [1.17, 1.19] | 1.28 [1.27, 1.30] | 1.39 [1.37, 1.41] |
+| | stopping rule | **1.25** [1.24, 1.26] | **1.22** [1.20, 1.23] | 1.31 [1.30, 1.34] | 1.40 [1.38, 1.43] |
+
+Live run of the static rule: recall == curves for every query, as on SIFT1M. Time of the static rule
+vs plain Faiss: Deep1M 0.70 / 0.78 / 0.88 / 1.24×, nlist 1024 0.91 / 0.92 / 1.01 / 1.20× (the
+256-centroid quantizer call again).
+
+**Reading.** On SIFT1M/4096 the two calibrated rules are equal (static ahead at 0.99). On Deep1M the
+stopping rule is ahead at every target with non-overlapping CIs (1.65 vs 1.52 at 0.99, 1.26 vs
+1.20 at 0.9); on nlist 1024 ahead at 0.8/0.9, equal at 0.95/0.99. So the scan feedback does add
+something where the tail of hard queries is longer (Deep1M), and never costs anything except the
+one cell SIFT1M/0.99. Decision for the report (Matvei, structure B kept): present the two
+calibrated rules together as "what is reachable" (both ≈ a third of the oracle); the stopping rule
+stays the headline because it is at least as good in 11 of 12 cells, more robust across
+configurations, and has the closed form; the static rule is the cheaper one in time at R = 0.99.
+`report/results.md` §4/§5/§11 updated accordingly.
 
 ---
 
