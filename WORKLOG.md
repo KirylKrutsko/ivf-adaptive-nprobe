@@ -20,7 +20,7 @@ Status board (updated with every entry):
 | E5 timing | done (`results/12_*`), rerun 2026-11-16 on Kiryl's machine (quoted in the report): capped rule 1.03–1.09×, stopping rule 0.27–0.33× |
 | Timing in C++ (stopping + fitted rule) | done (`cpp/`, SIFT1M): fitted rule, 3 features 0.96 / 1.02 / 1.06 / 1.12×; stopping rule 0.96 / 1.01 / 0.91 / 1.04× |
 | Fitted rule feature analysis | done (`17_fitted_rule_analysis.py`): 3 features (d32/d1, d1, size) = 17; closed form |
-| Presentation | `presentation/` (33 slides + speaker notes), fitted and stopping rule discussed together |
+| Presentation | `presentation/` (34 slides, ~31 min, + speaker notes), fitted and stopping rule discussed together, timing as Python → why → C++ |
 | Extra data-aware features for both rules | tried (`18_extra_features.py`, SIFT1M): no gain for the fitted rule, ±2% not consistent for the stopping rule |
 | Plots | 1, 1b, 2, 3, 4, 4b, 5, 6, 7 (`results/plots/`), structure B |
 | Side exp.: rule capped at nprobe | done (`results/06_*`, plot 5) |
@@ -30,6 +30,39 @@ Status board (updated with every entry):
 | Fitted static rule, tune → test + live + timing | done on all three configs (`16_fitted_rule_tuned.py`): equal to the stopping rule on SIFT1M/4096 (ahead at 0.99), behind it on Deep1M and nlist 1024 |
 | Compact stopping rule, live check | done (`15_stoprule_verify.py`, SIFT1M): formula == model; 1.17 / 1.25 / 1.32 / 1.29× tuned |
 | Extensions | 3 (nlist = 1024): `results/nlist1024/`; 1 (Deep1M): `configs/deep1m.yaml`, `results/deep1m/` |
+
+---
+
+## 2026-11-17 — presentation finished for review (Kiryl)
+
+**Done** (`presentation/adaptive-nprobe.html`, `presentation/speaker-notes.md`; nothing else changed)
+- Text trimmed on slides 13, 16, 17, 18, 20, 21, 25, 27 (grey clarifications moved to the speaker
+  notes; slide 17 now ends with "Let's do ML!"; slide 27's subtitle is just "share of queries with
+  recall@10 ≤ 5/10", the equal-work budget is said aloud).
+- Matvei's fitted-rule runs on Deep1M and nlist 1024 (entry of 2026-11-16) worked in: the Deep1M
+  slide shows both learned rules (stopping 1.24 / 1.26 / 1.36 / 1.65× vs fitted 1.20 / 1.20 / 1.32 /
+  1.52×), titled "Longer hard tail: watching the scan pays more"; the stopping-rule result slide
+  says the rules tie *on SIFT1M*; the limitations no longer say the fitted rule was not run on Deep1M.
+- "Also tried other features: no improvement" / "tried other signals: no gain" on the two
+  feature-analysis slides (entry above), details in the notes.
+- Next steps on the last content slide: cheaper centroid search for far centroids, other more
+  diverse datasets, parallel and GPU evaluation, billion-scale indexes (data-aware features, the
+  scan-restart point and HNSW removed: tried, or out of scope).
+- "Watch it decide" restored after the stopping-rule formula: two real test queries, d_next/d1
+  rising against the formula's threshold falling, the search stops where they cross (easy query 4
+  cells, oracle 3; hard query 32, oracle 27; recall 1.0 both). Deck now 34 slides; the speaker notes'
+  per-slide timings add up to ~31 min (slide 28, tail recall, is the easiest cut).
+
+**Idea, not run: does the time gain grow with N?** nlist usually grows like 4√N–16√N, so cells get
+bigger with N (1M: ~244 vectors per cell; 1B with 2^16–2^20 cells: 1k–15k). Re-ranking and other
+fixed per-query costs (a third of the time at 1M) then weigh less, and the per-cell setup cost of
+scanning is spread over more vectors, so scan time follows the vector count more closely. Our
+nlist 1024 run already points that way (fitted rule, Python timing: 0.91 / 0.92 / 1.01 / 1.20× vs
+0.76 / 0.83 / 0.93 / 1.15× at nlist 4096, same work savings). Against it: with an exact quantizer
+the centroid search grows like √N too, and at billion scale it is done with an HNSW quantizer whose
+cost grows with the number of centroids asked for (our rules need 64–256). Testable on SIFT10M
+(first 10M of BIGANN, ~1.3 GB, published ground truth) with nlist 16384 / 65536: rerun 03, 16/17,
+the C++ fitted benchmark.
 
 ---
 
